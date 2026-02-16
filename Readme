@@ -1,0 +1,57 @@
+# YTDownload
+
+A Windows-friendly YouTube downloader with:
+
+- Sequential filenames (video001.mp4, video002.mp4, ...)
+- Multi-threaded downloads via aria2
+- Clean tqdm download progress bar
+- AAC audio conversion for Windows compatibility
+- Automatic merging to MP4
+
+---
+
+## Requirements
+
+You must install:
+
+- Python 3.10+
+- ffmpeg (added to PATH)
+- aria2
+- Node.js (optional but recommended for yt-dlp JS runtime)
+
+---
+
+## Install
+
+Clone or download this project, then:
+
+```bash
+pip install -r requirements.txt
+```
+
+## Usage
+```
+python YTDownload.py --link <YouTube_URL>
+```
+
+Optional arguments:
+```
+--quality {720,1080,4k}
+--folder <output_folder>
+```
+
+**Example:**
+```
+python YTDownload.py --link https://youtu.be/VIDEOID --quality 4k
+```
+**Output**
+
+Videos are saved by default in: `~/Videos/DownloadedVideos`With automatic sequential naming
+
+## Features
+
+- Fast segmented downloads (aria2)
+- Real progress bars (download + conversion)
+- Clean terminal output
+- Safe AAC audio conversion
+- Windows optimized
