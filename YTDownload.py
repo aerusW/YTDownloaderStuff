@@ -41,9 +41,6 @@ def convert_audio_to_aac(filename: str):
     Video stream is copied without re-encoding to preserve quality.
     Displays a tqdm progress bar.
     """
-    import subprocess
-    import re
-    from tqdm import tqdm
 
     abs_input = os.path.abspath(filename)
     temp_file = abs_input.replace(".mp4", "_aac.mp4")
@@ -206,21 +203,31 @@ def main():
     default_folder = os.path.join(home, "Videos", "DownloadedVideos")
     os.makedirs(default_folder, exist_ok=True)
 
-    parser = argparse.ArgumentParser(description="YouTube downloader with sequential filenames")
-    parser.add_argument("--link", type=str, help="YouTube video URL")
+    parser = argparse.ArgumentParser(
+    prog="YTDownload",
+    description="High-speed YouTube downloader with progress bars and AAC conversion.",
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter
+)
+
+    parser.add_argument(
+        "--link",
+        type=str,
+        help="YouTube video URL"
+    )
+
     parser.add_argument(
         "--quality",
         choices=["720", "1080", "4k"],
         default="1080",
-        help="Video quality (default: 1080p)"
+        help="Maximum video quality"
     )
+
     parser.add_argument(
         "--folder",
         type=str,
         default=default_folder,
-        help=f"Output folder for downloaded videos (default: {default_folder})"
-    )
-
+        help="Output folder for downloaded videos"
+)
     args = parser.parse_args()
 
     # Prompt user for URL if not provided
