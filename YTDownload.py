@@ -39,29 +39,88 @@ def convert_audio_to_aac(filename: str):
     """
     Convert video audio to AAC using ffmpeg.
     Video stream is copied without re-encoding to preserve quality.
-    The original file is replaced by the converted one.
+    Displays a tqdm progress bar.
     """
+    import subprocess
+    import re
+    from tqdm import tqdm
+
     abs_input = os.path.abspath(filename)
     temp_file = abs_input.replace(".mp4", "_aac.mp4")
 
-    command = [
-        "ffmpeg",
-        "-y",  # overwrite output if exists
-        "-i", abs_input,
-        "-c:v", "copy",  # copy video stream
-        "-c:a", "aac",   # convert audio to AAC
-        "-b:a", "192k",  # audio bitrate
-        temp_file
+    # First get total duration using ffprobe
+    probe_cmd = [
+        "ffprobe",
+        "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        abs_input
     ]
 
     try:
-        subprocess.run(command, check=True)
+        total_duration = float(
+            subprocess.check_output(probe_cmd).decode().strip()
+        )
+    except Exception:
+        print("[ERROR] Could not determine video duration.")
+        sys.exit(1)
+
+    ffmpeg_cmd = [
+        "ffmpeg",
+        "-y",
+        "-i", abs_input,
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-progress", "pipe:1",   # machine-readable progress
+        "-nostats",
+        temp_file
+    ]
+
+    process = subprocess.Popen(
+        ffmpeg_cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        universal_newlines=True
+    )
+
+    progress_bar = tqdm(
+        total=total_duration,
+        desc="Converting",
+        unit="s",
+        ncols=100
+    )
+
+    time_pattern = re.compile(r"out_time_ms=(\d+)")
+
+    try:
+        for line in process.stdout:
+            match = time_pattern.search(line)
+            if match:
+                out_time_ms = int(match.group(1))
+                current_time = out_time_ms / 1_000_000
+                progress_bar.n = min(current_time, total_duration)
+                progress_bar.refresh()
+
+        process.wait()
+        progress_bar.n = total_duration
+        progress_bar.refresh()
+        progress_bar.close()
+
+        if process.returncode != 0:
+            print("\n[ERROR] FFmpeg conversion failed.")
+            sys.exit(1)
+
         os.remove(abs_input)
         os.rename(temp_file, abs_input)
-        print(f"[SUCCESS] Audio converted to AAC: {abs_input}")
-    except subprocess.CalledProcessError:
-        print("[ERROR] FFmpeg conversion failed.")
+        print("[SUCCESS] Audio converted to AAC.")
+
+    except KeyboardInterrupt:
+        process.kill()
+        progress_bar.close()
+        print("\n[ABORTED]")
         sys.exit(1)
+
 
 def download_video(url: str, quality: str, output_filename: str):
     """
