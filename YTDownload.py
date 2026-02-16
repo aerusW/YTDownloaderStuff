@@ -2,6 +2,9 @@ import argparse
 import subprocess
 import sys
 import os
+from tqdm import tqdm # for progress bar 
+from yt_dlp import YoutubeDL # for downloading YouTube videos
+import re # for regex parsing of aria2 output
 
 def get_link_from_user() -> str:
     """Prompt the user to enter a YouTube URL if not provided as a flag."""
@@ -62,33 +65,80 @@ def convert_audio_to_aac(filename: str):
 
 def download_video(url: str, quality: str, output_filename: str):
     """
-    Download a YouTube video with yt-dlp using aria2 for multi-threaded download.
-    Merges video and audio automatically and converts audio to AAC afterwards.
+    Download a YouTube video with yt-dlp using aria2 and a real tqdm progress bar.
     """
+
     format_string = build_format_string(quality)
+
+    # Regex to parse aria2 progress line
+    aria_progress_pattern = re.compile(
+        r"\[(?:#\w+\s+)?(\d+\.?\d*\w*)\/(\d+\.?\d*\w*)\((\d+)%\)\s+CN:\d+\s+DL:(\d+\.?\d*\w*)\s+ETA:(\d+\w*)\]"
+    )
 
     command = [
         "yt-dlp",
         "-f", format_string,
-        "--cookies-from-browser", "firefox",  # use cookies from Firefox for authenticated downloads
-        "--js-runtimes", "node",  # use Node.js for JavaScript execution (better performance)
-        "--remote-components", "ejs:github",  # use EJS remote component for better performance
-        "--merge-output-format", "mp4",  # merged output format
-        "--external-downloader", "aria2c",  # use aria2 for speed
+        "--newline",
+        "--no-color",
+        "--merge-output-format", "mp4",
+        "--external-downloader", "aria2c",
         "--external-downloader-args",
-        "aria2c:-x 8 -s 8 -k 1M --file-allocation=none",
-        "-o", output_filename,  # output filename
+        "aria2c:-x 8 -s 8 -k 1M --file-allocation=none --summary-interval=1 --console-log-level=warn",
+        "-o", output_filename,
         url
     ]
 
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        universal_newlines=True
+    )
+
+    progress_bar = None
+
     try:
-        subprocess.run(command, check=True)
-        print(f"[SUCCESS] Download finished: {output_filename}")
-    except subprocess.CalledProcessError:
-        print("[ERROR] Download failed.")
+        for line in process.stdout:
+            line = line.strip()
+
+            match = aria_progress_pattern.search(line)
+            if match:
+                downloaded_str, total_str, percent, speed_str, eta_str = match.groups()
+
+                percent = int(percent)
+
+                if progress_bar is None:
+                    progress_bar = tqdm(
+                        total=100,
+                        desc="Downloading",
+                        ncols=100
+                    )
+
+                progress_bar.n = percent
+                progress_bar.set_postfix({
+                    "Speed": speed_str,
+                    "ETA": eta_str
+                })
+                progress_bar.refresh()
+
+        process.wait()
+
+        if progress_bar:
+            progress_bar.n = 100
+            progress_bar.refresh()
+            progress_bar.close()
+
+        if process.returncode != 0:
+            print("\n[ERROR] Download failed.")
+            sys.exit(1)
+
+        print("[SUCCESS] Download finished.")
+
+    except KeyboardInterrupt:
+        process.kill()
+        print("\n[ABORTED]")
         sys.exit(1)
 
-    # Convert audio to AAC for Windows compatibility
     convert_audio_to_aac(output_filename)
 
 def main():
