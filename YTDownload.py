@@ -5,6 +5,9 @@ import os
 from tqdm import tqdm # for progress bar 
 from yt_dlp import YoutubeDL # for downloading YouTube videos
 import re # for regex parsing of aria2 output
+import logging # logging 
+from datetime import datetime # for timestamping logs
+
 
 def get_link_from_user() -> str:
     """Prompt the user to enter a YouTube URL if not provided as a flag."""
@@ -123,6 +126,7 @@ def download_video(url: str, quality: str, output_filename: str):
     """
     Download a YouTube video with yt-dlp using aria2 and a real tqdm progress bar.
     """
+    full_output = []
 
     format_string = build_format_string(quality)
 
@@ -147,7 +151,7 @@ def download_video(url: str, quality: str, output_filename: str):
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.PIPE,
         universal_newlines=True
     )
 
@@ -156,6 +160,8 @@ def download_video(url: str, quality: str, output_filename: str):
     try:
         for line in process.stdout:
             line = line.strip()
+            if line:
+                full_output.append(line)
 
             match = aria_progress_pattern.search(line)
             if match:
@@ -178,6 +184,7 @@ def download_video(url: str, quality: str, output_filename: str):
                 progress_bar.refresh()
 
         process.wait()
+        stderr_output = process.stderr.read()  # capture real error messages
 
         if progress_bar:
             progress_bar.n = 100
@@ -185,8 +192,12 @@ def download_video(url: str, quality: str, output_filename: str):
             progress_bar.close()
 
         if process.returncode != 0:
-            print("\n[ERROR] Download failed.")
+            error_message = "\n".join(full_output) + "\n" + stderr_output
+            logging.error("Download failed:\n%s", error_message)
+            print("\n[ERROR] Download failed. See log for details.")
             sys.exit(1)
+
+
 
         print("[SUCCESS] Download finished.")
 
@@ -196,6 +207,48 @@ def download_video(url: str, quality: str, output_filename: str):
         sys.exit(1)
 
     convert_audio_to_aac(output_filename)
+
+def setup_logging(base_folder: str) -> str:
+    """
+    Sets up logging for the downloader.
+
+    - Creates a 'logs' folder inside base_folder
+    - Creates a timestamped log file
+    - Keeps only the 5 newest log files
+    - Returns the log file path
+    """
+
+    log_folder = os.path.join(base_folder, "logs")
+    os.makedirs(log_folder, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = os.path.join(log_folder, f"download_{timestamp}.log")
+
+    # Configure logging to write warnings/errors to file
+    logging.basicConfig(
+        filename=log_file,
+        level=logging.WARNING,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        filemode="w"  # ensures a new file is created for each run
+    )
+
+    # Write initial message so file exists immediately
+    logging.warning("=== Download session started ===")
+
+    # Keep only 5 newest log files
+    log_files = sorted(
+        [os.path.join(log_folder, f) for f in os.listdir(log_folder) if f.endswith(".log")],
+        key=os.path.getmtime
+    )
+
+    if len(log_files) > 5:
+        for old_file in log_files[:-5]:
+            try:
+                os.remove(old_file)
+            except Exception:
+                pass
+
+    return log_file
 
 def main():
     # Set default folder to Videos/DownloadedVideos in the user's home directory
@@ -238,7 +291,8 @@ def main():
 
     # Ensure the folder exists
     os.makedirs(args.folder, exist_ok=True)
-
+    # Setup logging before calling download
+    log_file = setup_logging(args.folder)
     # Determine next sequential filename
     output_filename = get_next_video_filename(args.folder)
 
