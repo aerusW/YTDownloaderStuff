@@ -11,11 +11,11 @@ import json
 
 def load_config():
     """
-    Load configuration from script folder (Windows) or ~/.config/ytdownload/config.json (Linux/macOS).
+    Load configuration from script folder (Windows) or ~/.config/config.json (Linux/macOS).
     Resolves ~ to home folder.
     """
     # First, try script folder config (Windows)
-    script_config_path = os.path.join(os.path.dirname(__file__), "config.json")
+    script_config_path = os.path.join(os.path.dirname(__file__), ".config/config.json")
     if os.path.exists(script_config_path):
         try:
             with open(script_config_path, "r") as f:
@@ -30,7 +30,7 @@ def load_config():
             return {}
 
     # Fallback for Linux/macOS
-    config_path = os.path.expanduser("~/.config/ytdownload/config.json")
+    config_path = os.path.expanduser(".config/config.json")
     if os.path.exists(config_path):
         try:
             with open(config_path, "r") as f:
@@ -40,7 +40,7 @@ def load_config():
                         config[key] = os.path.expanduser(config[key])
                 return config
         except Exception:
-            print("[WARNING] Failed to read ~/.config config. Using defaults.")
+            print("[WARNING] Failed to read .config/config.json. Using defaults.")
             return {}
 
     return {}
@@ -328,10 +328,6 @@ def main():
 
     # Determine next sequential filename
     output_filename = get_next_video_filename(final_folder)
-
-    print("Final download folder:", final_folder)
-    print("Final log folder:", final_log_folder)
-    print("Next video filename:", output_filename)
 
     download_video(url, args.quality, output_filename)
 
