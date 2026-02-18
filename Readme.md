@@ -39,6 +39,14 @@ Basic usage:
 python YTDownload.py --link <YouTube_URL>
 ```
 
+Config file:
+```
+{
+    "default_download_folder": "~\\videos", # your default download folder
+    "default_log_folder": "~\\videos\\.DownloadLogs" # your default log folder
+}
+```
+
 Optional arguments:
 
 ```text
@@ -48,6 +56,7 @@ Optional arguments:
 -h, --help                  # Show help message
 ```
 
+note well: flags override the `config.json` file
 **Example:**
 
 ```bash
