@@ -7,6 +7,26 @@ from yt_dlp import YoutubeDL # for downloading YouTube videos
 import re # for regex parsing of aria2 output
 import logging # logging 
 from datetime import datetime # for timestamping logs
+import json
+
+def load_config():
+    """
+    Load configuration from ~/.config/ytdownload/config.json.
+    Returns dictionary with config values.
+    If config does not exist, returns empty dict.
+    """
+    config_path = os.path.expanduser("config.json")
+
+    if not os.path.exists(config_path):
+        return {}
+
+    try:
+        with open(config_path, "r") as f:
+            config = json.load(f)
+            return config
+    except Exception:
+        print("[WARNING] Failed to read config file. Using defaults.")
+        return {}
 
 
 def get_link_from_user() -> str:
@@ -251,16 +271,27 @@ def setup_logging(log_base_folder: str) -> str:
     return log_file
 
 def main():
-    # Set default folder to Videos/DownloadedVideos in the user's home directory
+    # Load config
+    config = load_config()
+
+    # Fallback default folder
     home = os.path.expanduser("~")
-    default_folder = os.path.join(home, "Videos", "DownloadedVideos")
-    os.makedirs(default_folder, exist_ok=True)
+    fallback_folder = os.path.join(home, "Videos", "DownloadedVideos")
+
+    # Get config values or fallback
+    config_folder = os.path.expanduser(
+        config.get("default_download_folder", fallback_folder)
+    )
+
+    config_log_folder = os.path.expanduser(
+        config.get("default_log_folder", config_folder)
+    )
 
     parser = argparse.ArgumentParser(
-    prog="YTDownload",
-    description="High-speed YouTube downloader with progress bars and AAC conversion.",
-    formatter_class=argparse.ArgumentDefaultsHelpFormatter
-)
+        prog="YTDownload",
+        description="High-speed YouTube downloader with progress bars and AAC conversion.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
 
     parser.add_argument(
         "--link",
@@ -278,17 +309,26 @@ def main():
     parser.add_argument(
         "--folder",
         type=str,
-        default=default_folder,
-        help="Output folder for downloaded videos"
-)
-    
+        help="Output folder for downloaded videos (overrides config)"
+    )
+
     parser.add_argument(
-    "--log-folder",
-    type=str,
-    help="Folder where log files will be stored (default: same as video folder)"
-)
+        "--log-folder",
+        type=str,
+        help="Folder where log files will be stored (overrides config)"
+    )
 
     args = parser.parse_args()
+
+    # Resolve final folders (flag > config > fallback)
+    final_folder = os.path.abspath(
+        args.folder if args.folder else config.get("default_download_folder", fallback_folder)
+    )
+
+    final_log_folder = os.path.abspath(
+        args.log_folder if args.log_folder else config.get("default_log_folder", final_folder)
+    )
+
 
     # Prompt user for URL if not provided
     url = args.link if args.link else get_link_from_user()
@@ -296,15 +336,23 @@ def main():
         print("[ERROR] No URL provided.")
         sys.exit(1)
 
-    # Ensure the folder exists
-    os.makedirs(args.folder, exist_ok=True)
+    # Ensure folders exist
+    os.makedirs(final_folder, exist_ok=True)
+    os.makedirs(final_log_folder, exist_ok=True)
+
     # Setup logging before calling download
-    log_folder = args.log_folder if args.log_folder else args.folder
-    log_file = setup_logging(log_folder)
+    log_file = setup_logging(final_log_folder)
+
     # Determine next sequential filename
-    output_filename = get_next_video_filename(args.folder)
+    output_filename = get_next_video_filename(final_folder)
+
+    print("Final download folder:", final_folder)
+    print("Final log folder:", final_log_folder)
+    output_filename = get_next_video_filename(final_folder)
+    print("Next video filename:", output_filename)
 
     download_video(url, args.quality, output_filename)
+
 
 if __name__ == "__main__":
     main()
