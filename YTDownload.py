@@ -11,22 +11,40 @@ import json
 
 def load_config():
     """
-    Load configuration from ~/.config/ytdownload/config.json.
-    Returns dictionary with config values.
-    If config does not exist, returns empty dict.
+    Load configuration from script folder (Windows) or ~/.config/ytdownload/config.json (Linux/macOS).
+    Resolves ~ to home folder.
     """
-    config_path = os.path.expanduser("config.json")
+    # First, try script folder config (Windows)
+    script_config_path = os.path.join(os.path.dirname(__file__), "config.json")
+    if os.path.exists(script_config_path):
+        try:
+            with open(script_config_path, "r") as f:
+                config = json.load(f)
+                # Expand ~ in paths
+                for key in ["default_download_folder", "default_log_folder"]:
+                    if key in config:
+                        config[key] = os.path.expanduser(config[key])
+                return config
+        except Exception:
+            print("[WARNING] Failed to read script folder config. Using defaults.")
+            return {}
 
-    if not os.path.exists(config_path):
-        return {}
+    # Fallback for Linux/macOS
+    config_path = os.path.expanduser("~/.config/ytdownload/config.json")
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r") as f:
+                config = json.load(f)
+                for key in ["default_download_folder", "default_log_folder"]:
+                    if key in config:
+                        config[key] = os.path.expanduser(config[key])
+                return config
+        except Exception:
+            print("[WARNING] Failed to read ~/.config config. Using defaults.")
+            return {}
 
-    try:
-        with open(config_path, "r") as f:
-            config = json.load(f)
-            return config
-    except Exception:
-        print("[WARNING] Failed to read config file. Using defaults.")
-        return {}
+    return {}
+
 
 
 def get_link_from_user() -> str:
@@ -278,57 +296,22 @@ def main():
     home = os.path.expanduser("~")
     fallback_folder = os.path.join(home, "Videos", "DownloadedVideos")
 
-    # Get config values or fallback
-    config_folder = os.path.expanduser(
-        config.get("default_download_folder", fallback_folder)
-    )
-
-    config_log_folder = os.path.expanduser(
-        config.get("default_log_folder", config_folder)
-    )
-
     parser = argparse.ArgumentParser(
         prog="YTDownload",
         description="High-speed YouTube downloader with progress bars and AAC conversion.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
-    parser.add_argument(
-        "--link",
-        type=str,
-        help="YouTube video URL"
-    )
-
-    parser.add_argument(
-        "--quality",
-        choices=["720", "1080", "4k"],
-        default="1080",
-        help="Maximum video quality"
-    )
-
-    parser.add_argument(
-        "--folder",
-        type=str,
-        help="Output folder for downloaded videos (overrides config)"
-    )
-
-    parser.add_argument(
-        "--log-folder",
-        type=str,
-        help="Folder where log files will be stored (overrides config)"
-    )
+    parser.add_argument("--link", type=str, help="YouTube video URL")
+    parser.add_argument("--quality", choices=["720", "1080", "4k"], default="1080", help="Maximum video quality")
+    parser.add_argument("--folder", type=str, help="Output folder for downloaded videos (overrides config)")
+    parser.add_argument("--log-folder", type=str, help="Folder where log files will be stored (overrides config)")
 
     args = parser.parse_args()
 
-    # Resolve final folders (flag > config > fallback)
-    final_folder = os.path.abspath(
-        args.folder if args.folder else config.get("default_download_folder", fallback_folder)
-    )
-
-    final_log_folder = os.path.abspath(
-        args.log_folder if args.log_folder else config.get("default_log_folder", final_folder)
-    )
-
+    # Resolve final folders (flag > config > fallback) and make absolute
+    final_folder = os.path.abspath(args.folder if args.folder else config.get("default_download_folder", fallback_folder))
+    final_log_folder = os.path.abspath(args.log_folder if args.log_folder else config.get("default_log_folder", final_folder))
 
     # Prompt user for URL if not provided
     url = args.link if args.link else get_link_from_user()
@@ -340,7 +323,7 @@ def main():
     os.makedirs(final_folder, exist_ok=True)
     os.makedirs(final_log_folder, exist_ok=True)
 
-    # Setup logging before calling download
+    # Setup logging
     log_file = setup_logging(final_log_folder)
 
     # Determine next sequential filename
@@ -348,11 +331,9 @@ def main():
 
     print("Final download folder:", final_folder)
     print("Final log folder:", final_log_folder)
-    output_filename = get_next_video_filename(final_folder)
     print("Next video filename:", output_filename)
 
     download_video(url, args.quality, output_filename)
-
 
 if __name__ == "__main__":
     main()
