@@ -208,7 +208,7 @@ def download_video(url: str, quality: str, output_filename: str):
 
     convert_audio_to_aac(output_filename)
 
-def setup_logging(base_folder: str) -> str:
+def setup_logging(log_base_folder: str) -> str:
     """
     Sets up logging for the downloader.
 
@@ -218,7 +218,7 @@ def setup_logging(base_folder: str) -> str:
     - Returns the log file path
     """
 
-    log_folder = os.path.join(base_folder, "logs")
+    log_folder = log_base_folder
     os.makedirs(log_folder, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -281,6 +281,13 @@ def main():
         default=default_folder,
         help="Output folder for downloaded videos"
 )
+    
+    parser.add_argument(
+    "--log-folder",
+    type=str,
+    help="Folder where log files will be stored (default: same as video folder)"
+)
+
     args = parser.parse_args()
 
     # Prompt user for URL if not provided
@@ -292,7 +299,8 @@ def main():
     # Ensure the folder exists
     os.makedirs(args.folder, exist_ok=True)
     # Setup logging before calling download
-    log_file = setup_logging(args.folder)
+    log_folder = args.log_folder if args.log_folder else args.folder
+    log_file = setup_logging(log_folder)
     # Determine next sequential filename
     output_filename = get_next_video_filename(args.folder)
 
