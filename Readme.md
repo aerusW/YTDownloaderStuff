@@ -44,6 +44,7 @@ Optional arguments:
 ```text
 --quality {720,1080,4k}    # Download quality
 --folder <output_folder>    # Output folder (default: ~/Videos/DownloadedVideos)
+--log-folder <log_folder>    # Folder for logs (default: ~/Videos/DownloadedVideos)
 -h, --help                  # Show help message
 ```
 
