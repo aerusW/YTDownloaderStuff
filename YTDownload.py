@@ -1,7 +1,6 @@
 import argparse
 import sys
 import os
-import json
 import loggingtool
 import downloadtool
 import configmanager
