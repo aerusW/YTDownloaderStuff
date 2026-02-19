@@ -5,9 +5,9 @@ import os
 from tqdm import tqdm # for progress bar 
 from yt_dlp import YoutubeDL # for downloading YouTube videos
 import re # for regex parsing of aria2 output
-import logging # logging 
 from datetime import datetime # for timestamping logs
 import json
+import loggingtool
 
 def load_config():
     """
@@ -231,7 +231,7 @@ def download_video(url: str, quality: str, output_filename: str):
 
         if process.returncode != 0:
             error_message = "\n".join(full_output) + "\n" + stderr_output
-            logging.error("Download failed:\n%s", error_message)
+            loggingtool.logging.error("Download failed:\n%s", error_message)
             print("\n[ERROR] Download failed. See log for details.")
             sys.exit(1)
 
@@ -245,48 +245,6 @@ def download_video(url: str, quality: str, output_filename: str):
         sys.exit(1)
 
     convert_audio_to_aac(output_filename)
-
-def setup_logging(log_base_folder: str) -> str:
-    """
-    Sets up logging for the downloader.
-
-    - Creates a 'logs' folder inside base_folder
-    - Creates a timestamped log file
-    - Keeps only the 5 newest log files
-    - Returns the log file path
-    """
-
-    log_folder = log_base_folder
-    os.makedirs(log_folder, exist_ok=True)
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = os.path.join(log_folder, f"download_{timestamp}.log")
-
-    # Configure logging to write warnings/errors to file
-    logging.basicConfig(
-        filename=log_file,
-        level=logging.WARNING,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        filemode="w"  # ensures a new file is created for each run
-    )
-
-    # Write initial message so file exists immediately
-    logging.warning("=== Download session started ===")
-
-    # Keep only 5 newest log files
-    log_files = sorted(
-        [os.path.join(log_folder, f) for f in os.listdir(log_folder) if f.endswith(".log")],
-        key=os.path.getmtime
-    )
-
-    if len(log_files) > 5:
-        for old_file in log_files[:-5]:
-            try:
-                os.remove(old_file)
-            except Exception:
-                pass
-
-    return log_file
 
 def main():
     # Load config
@@ -324,7 +282,7 @@ def main():
     os.makedirs(final_log_folder, exist_ok=True)
 
     # Setup logging
-    log_file = setup_logging(final_log_folder)
+    log_file = loggingtool.setup_logging(final_log_folder)
 
     # Determine next sequential filename
     output_filename = get_next_video_filename(final_folder)
