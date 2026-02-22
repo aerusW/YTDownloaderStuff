@@ -131,7 +131,7 @@ def get_best_encoder():
     # 4. Fallback to CPU (Standard)
     return "ffmpeg:-c:v libx264 -preset superfast"
 
-def download_video(url: str, quality: str, output_filename: str, segments: int, max_connections: int, segment_size: int, concurrent_segments: int, skip_conversion: bool = False):
+def download_video(url: str, quality: str, output_filename: str, segments: int, max_connections: int, segment_size: int, concurrent_segments: int, skip_conversion: bool = False, verbose: bool = False):
     """
     Download a YouTube video with yt-dlp using aria2 and a real tqdm progress bar.
     Converts audio to AAC after download.
@@ -161,7 +161,8 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
             "-o", f"{base_name}.%(ext)s", 
             url
         ]
-    print(f"segments: {segments}, connections: {max_connections}, segment size: {segment_size}MB, concurrent segments: {concurrent_segments}") # debug print for aria2 settings
+    if verbose:
+        print(f"downloading {segments} {segment_size}MB segments, with {max_connections} connections,: {concurrent_segments} at a time") # debug print for aria2 settings
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
