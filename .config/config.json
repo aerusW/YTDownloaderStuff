@@ -3,5 +3,6 @@
     "default_log_folder": "~\\videos\\.DownloadLogs",
     "default_segments": 16,
     "default_connections": 16,
-    "default_segment_size": 4
+    "default_segment_size": 4,
+    "concurrent_segments": 10
 }
