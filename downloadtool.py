@@ -131,7 +131,7 @@ def get_best_encoder():
     # 4. Fallback to CPU (Standard)
     return "ffmpeg:-c:v libx264 -preset superfast"
 
-def download_video(url: str, quality: str, output_filename: str, segments: int, max_connections: int, segment_size: int, concurrent_segments: int):
+def download_video(url: str, quality: str, output_filename: str, segments: int, max_connections: int, segment_size: int, concurrent_segments: int, skip_conversion: bool = False):
     """
     Download a YouTube video with yt-dlp using aria2 and a real tqdm progress bar.
     Converts audio to AAC after download.
@@ -204,7 +204,8 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
             sys.exit(1)
 
         print("[SUCCESS] Download finished.")
-        convert_audio_to_aac(output_filename)
+        if not skip_conversion:
+            convert_audio_to_aac(output_filename)
 
     except KeyboardInterrupt:
         process.kill()

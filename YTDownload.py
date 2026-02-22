@@ -4,14 +4,27 @@ import os
 import loggingtool
 import downloadtool
 import configmanager
+import subprocess
 
 def get_link_from_user() -> str:
     """Prompt the user to enter a YouTube URL if not provided as a flag."""
     return input("Enter YouTube video URL: ").strip()
 
+def check_ffmpeg_installed() -> bool:
+    """Check if ffmpeg is installed and available in PATH."""
+    try:
+        subprocess.run(["ffmpeg", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except FileNotFoundError:
+        return False
+
 def main():
     # Load config
     config = configmanager.load_config()
+    # Check for ffmpeg
+    if not check_ffmpeg_installed():
+        print("[ERROR] ffmpeg is not installed or not found in PATH. Please install ffmpeg to use this tool.")
+        sys.exit(1)
 
     # Fallback default folder
     home = os.path.expanduser("~")
@@ -30,6 +43,7 @@ def main():
     parser.add_argument("--segments", type=int, help="Number of segments for aria2 download")
     parser.add_argument("--connections", type=int, help="Number of connections per segment for aria2 download")
     parser.add_argument("--segment-size", type=int, help="Segment size in MB for aria2 download")
+    parser.add_argument("--do-not-convert", action="store_true", help="Skip audio conversion to AAC")
     parser.add_argument("--concurrent-segments", type=int, help="Number of concurrent segments for yt-dlp")
 
     args = parser.parse_args()
@@ -72,7 +86,9 @@ def main():
             final_segments,
             final_connections,
             final_segment_size,
-            final_concurrent_segments
+            final_concurrent_segments,
+            skip_conversion=args.do_not_convert,
+            
         )
 if __name__ == "__main__":
     main()
