@@ -4,14 +4,27 @@ import os
 import loggingtool
 import downloadtool
 import configmanager
+import subprocess
 
 def get_link_from_user() -> str:
     """Prompt the user to enter a YouTube URL if not provided as a flag."""
     return input("Enter YouTube video URL: ").strip()
 
+def check_ffmpeg_installed() -> bool:
+    """Check if ffmpeg is installed and available in PATH."""
+    try:
+        subprocess.run(["ffmpeg", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except FileNotFoundError:
+        return False
+
 def main():
     # Load config
     config = configmanager.load_config()
+    # Check for ffmpeg
+    if not check_ffmpeg_installed():
+        print("[ERROR] ffmpeg is not installed or not found in PATH. Please install ffmpeg to use this tool.")
+        sys.exit(1)
 
     # Fallback default folder
     home = os.path.expanduser("~")
