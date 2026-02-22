@@ -204,7 +204,8 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
             sys.exit(1)
 
         print("[SUCCESS] Download finished.")
-        convert_audio_to_aac(output_filename)
+        if not skip_conversion:
+            convert_audio_to_aac(output_filename)
 
     except KeyboardInterrupt:
         process.kill()
