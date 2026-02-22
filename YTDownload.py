@@ -30,6 +30,7 @@ def main():
     parser.add_argument("--segments", type=int, help="Number of segments for aria2 download")
     parser.add_argument("--connections", type=int, help="Number of connections per segment for aria2 download")
     parser.add_argument("--segment-size", type=int, help="Segment size in MB for aria2 download")
+    parser.add_argument("--concurrent-segments", type=int, help="Number of concurrent segments for yt-dlp")
 
     args = parser.parse_args()
 
@@ -41,6 +42,7 @@ def main():
     final_segments = args.segments if args.segments is not None else config.get("default_segments", 16)
     final_connections = args.connections if args.connections is not None else config.get("default_connections", 16)
     final_segment_size = args.segment_size if args.segment_size is not None else config.get("default_segment_size", 4)
+    final_concurrent_segments = args.concurrent_segments if args.concurrent_segments is not None else config.get("concurrent_segments", 10)
     # Prompt user for URL if not provided
     urls = args.link if args.link else []
 
@@ -69,7 +71,8 @@ def main():
             output_filename,
             final_segments,
             final_connections,
-            final_segment_size
+            final_segment_size,
+            final_concurrent_segments
         )
 if __name__ == "__main__":
     main()

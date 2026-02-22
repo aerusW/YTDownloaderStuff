@@ -5,6 +5,7 @@ import subprocess
 from tqdm import tqdm
 from yt_dlp import YoutubeDL
 import loggingtool
+import shutil
 
 
 def build_format_string(quality: str) -> str:
@@ -108,8 +109,29 @@ def convert_audio_to_aac(filename: str):
         print("\n[ABORTED]")
         sys.exit(1)
 
+def get_best_encoder():
+    """
+    Detects the best available hardware encoder.
+    Returns the ffmpeg string for yt-dlp postprocessor-args.
+    """
+    # 1. Check for Nvidia
+    if shutil.which("nvidia-smi"):
+        # p4 is a good balance for speed/quality on Maxwell or newer
+        return "ffmpeg:-c:v h264_nvenc -preset p4 -tune hq"
+    
+    # 2. Check for Intel/AMD via VA-API (Linux specific)
+    # Most Linux distros use VA-API for non-Nvidia hardware acceleration
+    if shutil.which("vainfo"):
+        return "ffmpeg:-c:v h264_vaapi -vaapi_device /dev/dri/renderD128"
+    
+    # 3. Check for Windows AMD (AMF)
+    if shutil.which("dxdiag"): # Very basic check for Windows env
+         return "ffmpeg:-c:v h264_amf"
 
-def download_video(url: str, quality: str, output_filename: str, segments: int, max_connections: int, segment_size: int):
+    # 4. Fallback to CPU (Standard)
+    return "ffmpeg:-c:v libx264 -preset superfast"
+
+def download_video(url: str, quality: str, output_filename: str, segments: int, max_connections: int, segment_size: int, concurrent_segments: int):
     """
     Download a YouTube video with yt-dlp using aria2 and a real tqdm progress bar.
     Converts audio to AAC after download.
@@ -121,19 +143,25 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
         r"\[(?:#\w+\s+)?(\d+\.?\d*\w*)\/(\d+\.?\d*\w*)\((\d+)%\)\s+CN:\d+\s+DL:(\d+\.?\d*\w*)\s+ETA:(\d+\w*)\]"
     )
 
+    base_name = os.path.splitext(output_filename)[0]
+
+    # Detect GPU capabilities
+    gpu_args = get_best_encoder()
+    base_name = os.path.splitext(output_filename)[0]
     command = [
-        "yt-dlp",
-        "-f", format_string,
-        "--newline",
-        "--no-color",
-        "--merge-output-format", "mp4",
-        "--external-downloader", "aria2c",
-        "--external-downloader-args",
-        f"aria2c:-x {max_connections} -s {segments} -k {segment_size}M --file-allocation=none --summary-interval=1 --console-log-level=warn",
-        "-o", output_filename,
-        url
-    ]
-    # print(f"segments: {segments}, connections: {max_connections}, segment size: {segment_size}MB") # debug print for aria2 settings
+            "yt-dlp",
+            "-f", format_string,
+            "--newline",
+            "--no-color",
+            "--merge-output-format", "mp4",
+            "--external-downloader", "aria2c",
+            "--external-downloader-args", f"aria2c:-x {max_connections} -s {segments} -k {segment_size}M --file-allocation=none --summary-interval=1 --console-log-level=warn",
+            "--concurrent-fragments", f"{concurrent_segments}",
+            "--postprocessor-args", gpu_args,
+            "-o", f"{base_name}.%(ext)s", 
+            url
+        ]
+    print(f"segments: {segments}, connections: {max_connections}, segment size: {segment_size}MB, concurrent segments: {concurrent_segments}") # debug print for aria2 settings
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
