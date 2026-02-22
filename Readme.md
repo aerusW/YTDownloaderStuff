@@ -38,11 +38,12 @@ Create a `config.json` file in `~/.config/config.json` if not present:
 
 ```json
 {
-    "default_download_folder": "~\\videos",       # your default download folder
-    "default_log_folder": "~\\videos\\.DownloadLogs",  # folder for logs
-    "default_segments": 16,                        # number of aria2 segments
-    "default_connections": 16,                     # connections per segment
-    "default_segment_size": 4                      # segment size in MB
+    "default_download_folder": "~\\videos",
+    "default_log_folder": "~\\videos\\.DownloadLogs",
+    "default_segments": 16,
+    "default_connections": 16,
+    "default_segment_size": 4,
+    "concurrent_segments": 10
 }
 ```
 
@@ -68,6 +69,7 @@ python YTDownload.py --link <YouTube_URL>
 --segments <n>                 # Number of aria2 segments (overrides config)
 --connections <n>              # Connections per segment (overrides config)
 --segment-size <MB>            # Segment size in MB (overrides config)
+--concurrent-segments          # Number of concurrent segments to download (overrides config)
 -h, --help                     # Show help message
 ```
 
