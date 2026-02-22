@@ -109,7 +109,7 @@ def convert_audio_to_aac(filename: str):
         sys.exit(1)
 
 
-def download_video(url: str, quality: str, output_filename: str, segments: int, max_connections: int, segment_size: int):
+def download_video(url: str, quality: str, output_filename: str, segments: int, max_connections: int, segment_size: int, skip_conversion: bool):
     """
     Download a YouTube video with yt-dlp using aria2 and a real tqdm progress bar.
     Converts audio to AAC after download.
@@ -176,7 +176,8 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
             sys.exit(1)
 
         print("[SUCCESS] Download finished.")
-        convert_audio_to_aac(output_filename)
+        if not skip_conversion:
+            convert_audio_to_aac(output_filename)
 
     except KeyboardInterrupt:
         process.kill()
