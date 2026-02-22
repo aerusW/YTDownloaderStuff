@@ -109,7 +109,7 @@ def convert_audio_to_aac(filename: str):
         sys.exit(1)
 
 
-def download_video(url: str, quality: str, output_filename: str):
+def download_video(url: str, quality: str, output_filename: str, segments: int, max_connections: int, segment_size: int):
     """
     Download a YouTube video with yt-dlp using aria2 and a real tqdm progress bar.
     Converts audio to AAC after download.
@@ -129,11 +129,11 @@ def download_video(url: str, quality: str, output_filename: str):
         "--merge-output-format", "mp4",
         "--external-downloader", "aria2c",
         "--external-downloader-args",
-        "aria2c:-x 8 -s 8 -k 1M --file-allocation=none --summary-interval=1 --console-log-level=warn",
+        f"aria2c:-x {max_connections} -s {segments} -k {segment_size}M --file-allocation=none --summary-interval=1 --console-log-level=warn",
         "-o", output_filename,
         url
     ]
-
+    # print(f"segments: {segments}, connections: {max_connections}, segment size: {segment_size}MB") # debug print for aria2 settings
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
