@@ -1,4 +1,7 @@
 {
     "default_download_folder": "~\\videos",
-    "default_log_folder": "~\\videos\\.DownloadLogs"
+    "default_log_folder": "~\\videos\\.DownloadLogs",
+    "default_segments": 16,
+    "default_connections": 16,
+    "default_segment_size": 4
 }
