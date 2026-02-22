@@ -45,6 +45,7 @@ def main():
     parser.add_argument("--segment-size", type=int, help="Segment size in MB for aria2 download")
     parser.add_argument("--do-not-convert", action="store_true", help="Skip audio conversion to AAC")
     parser.add_argument("--concurrent-segments", type=int, help="Number of concurrent segments for yt-dlp")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose output for debugging")
 
     args = parser.parse_args()
 
@@ -88,7 +89,7 @@ def main():
             final_segment_size,
             final_concurrent_segments,
             skip_conversion=args.do_not_convert,
-            
+            verbose=args.verbose
         )
 if __name__ == "__main__":
     main()
