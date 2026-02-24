@@ -9,18 +9,13 @@ import shutil
 
 
 def build_format_string(quality: str) -> str:
-    """
-    Build yt-dlp format string:
-    - Prefer H.264 video (Windows-friendly)
-    - Merge with best audio
-    - Default is 1080p if not specified
-    """
+    # This grabs the AAC version directly from YouTube.
     if quality == "4k":
-        return "bv*[height<=2160][vcodec^=avc1]+ba/b"
+        return "bv*[height<=2160][vcodec^=avc1]+ba[ext=m4a]/b[ext=mp4]/b"
     elif quality == "720":
-        return "bv*[height<=720][vcodec^=avc1]+ba/b"
-    else:  # 1080p default
-        return "bv*[height<=1080][vcodec^=avc1]+ba/b"
+        return "bv*[height<=720][vcodec^=avc1]+ba[ext=m4a]/b[ext=mp4]/b"
+    else:
+        return "bv*[height<=1080][vcodec^=avc1]+ba[ext=m4a]/b[ext=mp4]/b"
 
 
 def get_next_video_filename(folder: str) -> str:
@@ -111,27 +106,27 @@ def convert_audio_to_aac(filename: str, verbose: bool = False):
         print("\n[ABORTED]")
         sys.exit(1)
 
-def get_best_encoder():
-    """
-    Detects the best available hardware encoder.
-    Returns the ffmpeg string for yt-dlp postprocessor-args.
-    """
-    # 1. Check for Nvidia
-    if shutil.which("nvidia-smi"):
-        # p4 is a good balance for speed/quality on Maxwell or newer
-        return "ffmpeg:-c:v h264_nvenc -preset p4 -tune hq"
+# def get_best_encoder():
+#     """
+#     Detects the best available hardware encoder.
+#     Returns the ffmpeg string for yt-dlp postprocessor-args.
+#     """
+#     # 1. Check for Nvidia
+#     if shutil.which("nvidia-smi"):
+#         # p4 is a good balance for speed/quality on Maxwell or newer
+#         return "ffmpeg:-c:v h264_nvenc -preset p4 -tune hq"
     
-    # 2. Check for Intel/AMD via VA-API (Linux specific)
-    # Most Linux distros use VA-API for non-Nvidia hardware acceleration
-    if shutil.which("vainfo"):
-        return "ffmpeg:-c:v h264_vaapi -vaapi_device /dev/dri/renderD128"
+#     # 2. Check for Intel/AMD via VA-API (Linux specific)
+#     # Most Linux distros use VA-API for non-Nvidia hardware acceleration
+#     if shutil.which("vainfo"):
+#         return "ffmpeg:-c:v h264_vaapi -vaapi_device /dev/dri/renderD128"
     
-    # 3. Check for Windows AMD (AMF)
-    if shutil.which("dxdiag"): # Very basic check for Windows env
-         return "ffmpeg:-c:v h264_amf"
+#     # 3. Check for Windows AMD (AMF)
+#     if shutil.which("dxdiag"): # Very basic check for Windows env
+#          return "ffmpeg:-c:v h264_amf"
 
-    # 4. Fallback to CPU (Standard)
-    return "ffmpeg:-c:v libx264 -preset superfast"
+#     # 4. Fallback to CPU (Standard)
+#     return "ffmpeg:-c:v libx264 -preset superfast"
 
 def download_video(url: str, quality: str, output_filename: str, segments: int, max_connections: int, segment_size: int, concurrent_segments: int, skip_conversion: bool = False, verbose: bool = False):
     """
@@ -142,6 +137,19 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
     format_string = build_format_string(quality)
 
     base_name = os.path.splitext(output_filename)[0]
+
+    # --- NEW LOGIC: Extract Metadata to check Codec ---
+    audio_codec = "unknown"
+    with YoutubeDL({'format': format_string, 'quiet': True}) as ydl:
+        try:
+            info = ydl.extract_info(url, download=False)
+            # yt-dlp usually populates 'acodec' for the requested format
+            audio_codec = info.get('acodec', 'unknown')
+            if verbose:
+                print(f"[VERBOSE] Detected Audio Codec: {audio_codec}")
+        except Exception as e:
+            if verbose:
+                print(f"[VERBOSE] Could not extract metadata: {e}")
 
     aria_progress_pattern = re.compile(
         r"\[(?:#\w+\s+)?(\d+\.?\d*\w*)\/(\d+\.?\d*\w*)\((\d+)%\)\s+CN:\d+\s+DL:(\d+\.?\d*\w*)\s+ETA:(\d+\w*)\]"
@@ -234,8 +242,12 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
             sys.exit(1)
 
         print("[SUCCESS] Download finished.")
-        if not skip_conversion:
+        is_aac = "aac" in audio_codec.lower() or "mp4a" in audio_codec.lower()
+        
+        if not skip_conversion and not is_aac:
             convert_audio_to_aac(output_filename, verbose=verbose)
+        elif is_aac:
+            print("[INFO] Audio is already AAC. Skipping conversion.")
 
     except KeyboardInterrupt:
         process.kill()
