@@ -138,12 +138,20 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
 
     base_name = os.path.splitext(output_filename)[0]
 
-    # --- NEW LOGIC: Extract Metadata to check Codec ---
+# --- FIXED LOGIC: Dictionary format for js_runtimes ---
     audio_codec = "unknown"
-    with YoutubeDL({'format': format_string, 'quiet': True}) as ydl:
+    ydl_opts = {
+        'format': format_string, 
+        'quiet': True, 
+        # The API expects { "runtime_name": {} } or { "runtime_name": {"path": "..."} }
+        'js_runtimes': {
+            'node': {}  # Enabling node with default config
+        }
+    }
+    
+    with YoutubeDL(ydl_opts) as ydl:
         try:
             info = ydl.extract_info(url, download=False)
-            # yt-dlp usually populates 'acodec' for the requested format
             audio_codec = info.get('acodec', 'unknown')
             if verbose:
                 print(f"[VERBOSE] Detected Audio Codec: {audio_codec}")
@@ -157,6 +165,7 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
     
     command = [
         "yt-dlp",
+        "--js-runtimes", "node",
         "-f", format_string,
         "--newline",
         "--no-color",
