@@ -35,7 +35,7 @@ def get_next_video_filename(folder: str) -> str:
         i += 1
 
 
-def convert_audio_to_aac(filename: str):
+def convert_audio_to_aac(filename: str, verbose: bool = False):
     """
     Convert video audio to AAC using ffmpeg.
     Video stream is copied without re-encoding to preserve quality.
@@ -70,6 +70,8 @@ def convert_audio_to_aac(filename: str):
         "-nostats",
         temp_file
     ]
+    if verbose:
+        print(f"[VERBOSE] Executing ffmpeg: {' '.join(ffmpeg_cmd)}\n")
 
     process = subprocess.Popen(
         ffmpeg_cmd,
@@ -133,82 +135,111 @@ def get_best_encoder():
 
 def download_video(url: str, quality: str, output_filename: str, segments: int, max_connections: int, segment_size: int, concurrent_segments: int, skip_conversion: bool = False, verbose: bool = False):
     """
-    Download a YouTube video with yt-dlp using aria2 and a real tqdm progress bar.
+    Download a YouTube video with yt-dlp using aria2.
     Converts audio to AAC after download.
     """
     full_output = []
     format_string = build_format_string(quality)
 
+    base_name = os.path.splitext(output_filename)[0]
+
     aria_progress_pattern = re.compile(
         r"\[(?:#\w+\s+)?(\d+\.?\d*\w*)\/(\d+\.?\d*\w*)\((\d+)%\)\s+CN:\d+\s+DL:(\d+\.?\d*\w*)\s+ETA:(\d+\w*)\]"
     )
-
-    base_name = os.path.splitext(output_filename)[0]
-
-    # Detect GPU capabilities
-    gpu_args = get_best_encoder()
-    base_name = os.path.splitext(output_filename)[0]
+    
     command = [
-            "yt-dlp",
-            "-f", format_string,
-            "--newline",
-            "--no-color",
-            "--merge-output-format", "mp4",
-            "--external-downloader", "aria2c",
-            "--external-downloader-args", f"aria2c:-x {max_connections} -s {segments} -k {segment_size}M --file-allocation=none --summary-interval=1 --console-log-level=warn",
-            "--concurrent-fragments", f"{concurrent_segments}",
-            "--postprocessor-args", gpu_args,
-            "-o", f"{base_name}.%(ext)s", 
-            url
-        ]
+        "yt-dlp",
+        "-f", format_string,
+        "--newline",
+        "--no-color",
+        "--merge-output-format", "mp4",
+        "--external-downloader", "aria2c",
+        "--external-downloader-args", f"aria2c:-x {max_connections} -s {segments} -k {segment_size}M --file-allocation=none --summary-interval=1 --console-log-level=warn",
+        "--concurrent-fragments", f"{concurrent_segments}",
+        "-o", f"{base_name}.%(ext)s", 
+        url
+    ]
+    
     if verbose:
-        print(f"downloading {segments} {segment_size}MB segments, with {max_connections} connections,: {concurrent_segments} at a time") # debug print for aria2 settings
+        print(f"\n[VERBOSE] aria2 settings: {segments} segments, {segment_size}MB chunks, {max_connections} connections, {concurrent_segments} concurrent")
+        print(f"[VERBOSE] Executing yt-dlp: {' '.join(command)}\n")
+        
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        universal_newlines=True
+        stderr=subprocess.STDOUT, # Safely handles the output buffer
+        universal_newlines=True,
+        errors="replace"          
     )
 
     progress_bar = None
 
     try:
+        # Loop through the output stream to catch errors and print status
         for line in process.stdout:
             line = line.strip()
-            if line:
-                full_output.append(line)
+            if not line:
+                continue
+            
+            full_output.append(line)
 
-            match = aria_progress_pattern.search(line)
-            if match:
-                downloaded_str, total_str, percent, speed_str, eta_str = match.groups()
-                percent = int(percent)
+            if verbose:
+                # In verbose mode, just dump the raw terminal output
+                print(f"[DEBUG] {line}")
+            else:
+                # In non-verbose mode, manage the clean UI and progress bar
+                if "[download] Destination:" in line:
+                    if progress_bar:
+                        progress_bar.n = 100
+                        progress_bar.refresh()
+                        progress_bar.close()
+                        progress_bar = None
+                    
+                    filename = line.split("\\")[-1] if "\\" in line else line.split("/")[-1]
+                    print(f"[INFO] Downloading stream: {filename}")
 
-                if progress_bar is None:
-                    progress_bar = tqdm(total=100, desc="Downloading", ncols=100)
+                elif "[Merger] Merging formats" in line:
+                    if progress_bar:
+                        progress_bar.n = 100
+                        progress_bar.refresh()
+                        progress_bar.close()
+                        progress_bar = None
+                    print("[INFO] Merging video and audio (this takes a few seconds)...")
 
-                progress_bar.n = percent
-                progress_bar.set_postfix({"Speed": speed_str, "ETA": eta_str})
-                progress_bar.refresh()
+                else:
+                    match = aria_progress_pattern.search(line)
+                    if match:
+                        downloaded_str, total_str, percent, speed_str, eta_str = match.groups()
+                        percent = int(percent)
+
+                        if progress_bar is None:
+                            progress_bar = tqdm(total=100, desc="Downloading", ncols=100)
+
+                        progress_bar.n = percent
+                        progress_bar.set_postfix({"Speed": speed_str, "ETA": eta_str})
+                        progress_bar.refresh()
 
         process.wait()
-        stderr_output = process.stderr.read()
 
+        # Clean up the progress bar if the process ends unexpectedly
         if progress_bar:
             progress_bar.n = 100
             progress_bar.refresh()
             progress_bar.close()
 
         if process.returncode != 0:
-            error_message = "\n".join(full_output) + "\n" + stderr_output
+            error_message = "\n".join(full_output)
             loggingtool.logging.error("Download failed:\n%s", error_message)
             print("\n[ERROR] Download failed. See log for details.")
             sys.exit(1)
 
         print("[SUCCESS] Download finished.")
         if not skip_conversion:
-            convert_audio_to_aac(output_filename)
+            convert_audio_to_aac(output_filename, verbose=verbose)
 
     except KeyboardInterrupt:
         process.kill()
+        if progress_bar:
+            progress_bar.close()
         print("\n[ABORTED]")
         sys.exit(1)

@@ -6,6 +6,7 @@ import downloadtool
 import configmanager
 import subprocess
 
+version: str = "1.0.0-multithreaded-alfa"
 def get_link_from_user() -> str:
     """Prompt the user to enter a YouTube URL if not provided as a flag."""
     return input("Enter YouTube video URL: ").strip()
@@ -46,6 +47,7 @@ def main():
     parser.add_argument("--do-not-convert", action="store_true", help="Skip audio conversion to AAC")
     parser.add_argument("--concurrent-segments", type=int, help="Number of concurrent segments for yt-dlp")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output for debugging")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {version}")
 
     args = parser.parse_args()
 
