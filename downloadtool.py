@@ -247,7 +247,8 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
         if not skip_conversion and not is_aac:
             convert_audio_to_aac(output_filename, verbose=verbose)
         elif is_aac:
-            print("[INFO] Audio is already AAC. Skipping conversion.")
+            if verbose:
+                print("[VERBOSE] Detected audio is already AAC. Skipping conversion.")
 
     except KeyboardInterrupt:
         process.kill()
