@@ -6,7 +6,7 @@ import src.downloadtool as downloadtool
 import src.configmanager as configmanager
 import subprocess
 
-version: str = "1.0.1-tests-pytest-alfa"
+version: str = "1.0.2 development"
 def get_link_from_user() -> str:
     """Prompt the user to enter a YouTube URL if not provided as a flag."""
     return input("Enter YouTube video URL: ").strip()
