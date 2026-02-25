@@ -78,6 +78,13 @@ python YTDownload.py --link <YouTube_URL>
 ```bash
 python YTDownload.py --link https://youtu.be/VIDEOID --quality 4k --segments 12 --connections 12
 ```
+## Testing
+
+Run tests from the project root directory:
+
+```bash
+python -m pytest -v
+```
 
 
 ## Features
