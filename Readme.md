@@ -78,6 +78,7 @@ python YTDownload.py --link <YouTube_URL>
 ```bash
 python YTDownload.py --link https://youtu.be/VIDEOID --quality 4k --segments 12 --connections 12
 ```
+
 ## Testing
 
 Run tests from the project root directory:
@@ -101,3 +102,36 @@ python -m pytest -v
 * Videos are **saved sequentially** in your configured folder by default (`~/Videos/DownloadedVideos`)
 * If no `--link` is provided, you will be prompted to input a URL interactively
 * Flags override the settings in `config.json`
+
+
+## Contributing
+
+Contributions are welcome! Please follow these guidelines:
+
+### Getting Started
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/your-feature`)
+3. Make your changes and commit them (`git commit -m 'Add your feature'`)
+4. Push to the branch (`git push origin feature/your-feature`)
+5. Open a Pull Request
+
+### Code Standards
+
+* Add tests for new functionality
+* Ensure all tests pass before submitting a PR
+* Include docstrings for functions and classes
+
+### Reporting Issues
+
+* Check existing issues before opening a new one
+* Provide clear descriptions and steps to reproduce
+* Include your Python version and OS
+
+### License
+
+## License
+
+This project is licensed under the GPL V3 License. See the [LICENSE](LICENSE) file for details.
+
+By contributing, you agree that your contributions will be licensed under the GPL V3 license.
