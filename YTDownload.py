@@ -6,7 +6,7 @@ import src.downloadtool as downloadtool
 import src.configmanager as configmanager
 import subprocess
 
-version: str = "1.0.2 development"
+version: str = "1.0.2 master"
 def get_link_from_user() -> str:
     """Prompt the user to enter a YouTube URL if not provided as a flag."""
     return input("Enter YouTube video URL: ").strip()
