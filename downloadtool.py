@@ -8,7 +8,7 @@ import loggingtool
 import shutil
 
 
-def build_format_string(quality: str) -> str:
+def build_format_string(quality: str) -> str: # Builds the yt-dlp format string based on the desired quality.
     # This grabs the AAC version directly from YouTube.
     if quality == "4k":
         return "bv*[height<=2160][vcodec^=avc1]+ba[ext=m4a]/b[ext=mp4]/b"
@@ -78,7 +78,7 @@ def convert_audio_to_aac(filename: str, verbose: bool = False):
     progress_bar = tqdm(total=total_duration, desc="Converting", unit="s", ncols=100)
     time_pattern = re.compile(r"out_time_ms=(\d+)")
 
-    try:
+    try: # Loop through ffmpeg output to update progress bar based on out_time_ms
         for line in process.stdout:
             match = time_pattern.search(line)
             if match:
@@ -127,7 +127,7 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
         }
     }
     
-    with YoutubeDL(ydl_opts) as ydl:
+    with YoutubeDL(ydl_opts) as ydl: # Attempt to extract metadata to determine audio codec before downloading
         try:
             info = ydl.extract_info(url, download=False)
             audio_codec = info.get('acodec', 'unknown')
@@ -141,7 +141,7 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
         r"\[(?:#\w+\s+)?(\d+\.?\d*\w*)\/(\d+\.?\d*\w*)\((\d+)%\)\s+CN:\d+\s+DL:(\d+\.?\d*\w*)\s+ETA:(\d+\w*)\]"
     )
     
-    command = [
+    command = [ # Construct the yt-dlp command with aria2 and progress parsing
         "yt-dlp",
         "--js-runtimes", "node",
         "-f", format_string,
@@ -149,7 +149,7 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
         "--no-color",
         "--merge-output-format", "mp4",
         "--external-downloader", "aria2c",
-        "--external-downloader-args", f"aria2c:-x {max_connections} -s {segments} -k {segment_size}M --file-allocation=none --summary-interval=1 --console-log-level=warn",
+        "--external-downloader-args", f"aria2c:-x {max_connections} -s {segments} -k {segment_size}M --file-allocation=none --summary-interval=1 --console-log-level=warn", # Adjusted aria2c arguments for better performance and progress reporting
         "--concurrent-fragments", f"{concurrent_segments}",
         "-o", f"{base_name}.%(ext)s", 
         url
