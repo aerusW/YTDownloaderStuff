@@ -1,12 +1,12 @@
 import argparse
-import sys
+# import sys
 import os
-import loggingtool
-import downloadtool
-import configmanager
+import src.loggingtool as loggingtool
+import src.downloadtool as downloadtool
+import src.configmanager as configmanager
 import subprocess
 
-version: str = "1.0.0-multithreaded-alfa"
+version: str = "1.0.1-tests-pytest-alfa"
 def get_link_from_user() -> str:
     """Prompt the user to enter a YouTube URL if not provided as a flag."""
     return input("Enter YouTube video URL: ").strip()
@@ -25,7 +25,8 @@ def main():
     # Check for ffmpeg
     if not check_ffmpeg_installed():
         print("[ERROR] ffmpeg is not installed or not found in PATH. Please install ffmpeg to use this tool.")
-        sys.exit(1)
+        raise RuntimeError("ffmpeg not found")
+        # sys.exit(1)
 
     # Fallback default folder
     home = os.path.expanduser("~")
@@ -69,7 +70,8 @@ def main():
             urls.append(url)
         else:
             print("[ERROR] No URL provided.")
-            sys.exit(1)
+            raise RuntimeError("No URL provided")
+            # sys.exit(1)
 
     # Ensure folders exist
     os.makedirs(final_folder, exist_ok=True)
