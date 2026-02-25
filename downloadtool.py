@@ -106,28 +106,6 @@ def convert_audio_to_aac(filename: str, verbose: bool = False):
         print("\n[ABORTED]")
         sys.exit(1)
 
-# def get_best_encoder():
-#     """
-#     Detects the best available hardware encoder.
-#     Returns the ffmpeg string for yt-dlp postprocessor-args.
-#     """
-#     # 1. Check for Nvidia
-#     if shutil.which("nvidia-smi"):
-#         # p4 is a good balance for speed/quality on Maxwell or newer
-#         return "ffmpeg:-c:v h264_nvenc -preset p4 -tune hq"
-    
-#     # 2. Check for Intel/AMD via VA-API (Linux specific)
-#     # Most Linux distros use VA-API for non-Nvidia hardware acceleration
-#     if shutil.which("vainfo"):
-#         return "ffmpeg:-c:v h264_vaapi -vaapi_device /dev/dri/renderD128"
-    
-#     # 3. Check for Windows AMD (AMF)
-#     if shutil.which("dxdiag"): # Very basic check for Windows env
-#          return "ffmpeg:-c:v h264_amf"
-
-#     # 4. Fallback to CPU (Standard)
-#     return "ffmpeg:-c:v libx264 -preset superfast"
-
 def download_video(url: str, quality: str, output_filename: str, segments: int, max_connections: int, segment_size: int, concurrent_segments: int, skip_conversion: bool = False, verbose: bool = False):
     """
     Download a YouTube video with yt-dlp using aria2.
