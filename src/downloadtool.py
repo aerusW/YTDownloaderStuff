@@ -4,7 +4,7 @@ import re
 import subprocess
 from tqdm import tqdm
 from yt_dlp import YoutubeDL
-import loggingtool
+import src.loggingtool as loggingtool
 import shutil
 
 
@@ -52,7 +52,8 @@ def convert_audio_to_aac(filename: str, verbose: bool = False):
         total_duration = float(subprocess.check_output(probe_cmd).decode().strip())
     except Exception:
         print("[ERROR] Could not determine video duration.")
-        sys.exit(1)
+        # sys.exit(1)
+        raise RuntimeError("Failed to get video duration")
 
     ffmpeg_cmd = [
         "ffmpeg",
@@ -94,7 +95,8 @@ def convert_audio_to_aac(filename: str, verbose: bool = False):
 
         if process.returncode != 0:
             print("\n[ERROR] FFmpeg conversion failed.")
-            sys.exit(1)
+            # sys.exit(1)
+            raise RuntimeError("FFmpeg conversion failed")
 
         os.remove(abs_input)
         os.rename(temp_file, abs_input)
@@ -104,7 +106,8 @@ def convert_audio_to_aac(filename: str, verbose: bool = False):
         process.kill()
         progress_bar.close()
         print("\n[ABORTED]")
-        sys.exit(1)
+        # sys.exit(1)
+        raise RuntimeError("Conversion aborted by user")
 
 def download_video(url: str, quality: str, output_filename: str, segments: int, max_connections: int, segment_size: int, concurrent_segments: int, skip_conversion: bool = False, verbose: bool = False):
     """
@@ -226,7 +229,8 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
             error_message = "\n".join(full_output)
             loggingtool.logging.error("Download failed:\n%s", error_message)
             print("\n[ERROR] Download failed. See log for details.")
-            sys.exit(1)
+            # sys.exit(1)
+            raise RuntimeError("Download failed")
 
         print("[SUCCESS] Download finished.")
         is_aac = "aac" in audio_codec.lower() or "mp4a" in audio_codec.lower()
@@ -242,4 +246,5 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
         if progress_bar:
             progress_bar.close()
         print("\n[ABORTED]")
-        sys.exit(1)
+        # sys.exit(1)
+        raise RuntimeError("Download aborted by user")
