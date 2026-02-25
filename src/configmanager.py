@@ -14,7 +14,7 @@ def load_config():
                 # Expand ~ in paths
                 for key in ["default_download_folder", "default_log_folder"]:
                     if key in config:
-                        config[key] = os.path.expanduser(config[key])
+                        config[key] = os.path.normpath(os.path.expanduser(config[key]))
                 return config
         except Exception:
             print("[WARNING] Failed to read script folder config. Using defaults.")
@@ -28,7 +28,7 @@ def load_config():
                 config = json.load(f)
                 for key in ["default_download_folder", "default_log_folder"]:
                     if key in config:
-                        config[key] = os.path.expanduser(config[key])
+                        config[key] = os.path.normpath(os.path.expanduser(config[key]))
                 return config
         except Exception:
             print("[WARNING] Failed to read .config/config.json. Using defaults.")
