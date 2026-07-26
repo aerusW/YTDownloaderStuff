@@ -71,6 +71,34 @@ def test_build_format_string_premium():
     result = downloadtool.build_format_string("premium")
     assert "616" in result
 
+def test_premium_fallback_pins_vp9():
+    """
+    Regression: the old chain fell back to an uncodeced bestvideo, so without
+    cookies it silently produced AV1 while the docs promised VP9.
+    """
+    result = downloadtool.build_format_string("premium")
+    tiers = result.split("/")
+    assert tiers[0].startswith("616")
+    # The tier right after 616 must constrain the codec to VP9
+    assert "vp0?9" in tiers[1] or "vp9" in tiers[1]
+    assert "height<=1080" in tiers[1]
+
+def test_premium_fallback_matches_both_vp9_spellings():
+    """YouTube reports VP9 as bare 'vp9' or ISO-style 'vp09.00.40.08'."""
+    import re
+    result = downloadtool.build_format_string("premium")
+    pattern = re.search(r"vcodec~='([^']+)'", result)
+    assert pattern, "expected a regex codec filter"
+    regex = re.compile(pattern.group(1))
+    assert regex.match("vp9")
+    assert regex.match("vp09.00.40.08")
+    assert not regex.match("av01.0.08M.08")
+    assert not regex.match("avc1.640028")
+
+def test_premium_chain_degrades_to_any_format():
+    result = downloadtool.build_format_string("premium")
+    assert result.split("/")[-1] == "b"
+
 # container selection tests
 def test_container_premium_is_mkv():
     assert downloadtool.container_for_quality("premium") == "mkv"
