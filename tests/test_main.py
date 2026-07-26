@@ -311,6 +311,102 @@ def test_skipped_downloads_counted_separately(monkeypatch, mock_config, mock_log
     assert "2 already in archive" in capsys.readouterr().out
 
 
+# ---------------------------
+# Naming
+# ---------------------------
+
+def test_descriptive_naming_is_the_default(monkeypatch, mock_config, mock_logging,
+                                           mock_download, mock_ffmpeg, tmp_path):
+    folder = str(tmp_path / "vids")
+    monkeypatch.setattr(sys, "argv",
+                        ["prog", "--link", "https://youtube.com/a", "--folder", folder])
+
+    main.main()
+
+    template = mock_download.call_args.kwargs["output_template"]
+    assert template is not None
+    assert os.path.dirname(template) == os.path.abspath(folder)
+    assert "%(title)" in template and "%(id)s" in template
+    assert "%(channel" in template
+
+
+def test_sequential_names_opt_in(monkeypatch, mock_config, mock_logging,
+                                 mock_download, mock_ffmpeg):
+    monkeypatch.setattr(sys, "argv", ["prog", "--link", "https://youtube.com/a",
+                                      "--sequential-names"])
+
+    main.main()
+
+    assert mock_download.call_args.kwargs["output_template"] is None
+
+
+def test_custom_output_template(monkeypatch, mock_config, mock_logging,
+                                mock_download, mock_ffmpeg):
+    monkeypatch.setattr(sys, "argv", ["prog", "--link", "https://youtube.com/a",
+                                      "--output-template", "%(id)s.%(ext)s"])
+
+    main.main()
+
+    assert mock_download.call_args.kwargs["output_template"].endswith("%(id)s.%(ext)s")
+
+
+def test_metadata_embedded_by_default(monkeypatch, mock_config, mock_logging,
+                                      mock_download, mock_ffmpeg):
+    monkeypatch.setattr(sys, "argv", ["prog", "--link", "https://youtube.com/a"])
+    main.main()
+    assert mock_download.call_args.kwargs["embed_metadata"] is True
+
+
+def test_no_metadata_flag(monkeypatch, mock_config, mock_logging,
+                          mock_download, mock_ffmpeg):
+    monkeypatch.setattr(sys, "argv", ["prog", "--link", "https://youtube.com/a",
+                                      "--no-metadata"])
+    main.main()
+    assert mock_download.call_args.kwargs["embed_metadata"] is False
+
+
+# ---------------------------
+# Console encoding
+# ---------------------------
+
+def test_non_cp1252_title_does_not_fail_the_download(monkeypatch, mock_config,
+                                                     mock_logging, mock_ffmpeg):
+    """
+    Regression: yt-dlp rewrites ASCII quotes in titles as fullwidth quotes
+    (U+FF02). Printing that name to a cp1252 Windows console raised
+    UnicodeEncodeError, so a download that had already succeeded was caught by
+    the per-URL handler and reported as a failure.
+    """
+    import io
+
+    saved_name = 'Fireship - The most interesting ＂hack＂ [abc].mp4'
+    monkeypatch.setattr(main.downloadtool, "get_next_video_filename",
+                        lambda folder, ext="mp4": f"video_001.{ext}")
+    monkeypatch.setattr(main.downloadtool, "download_video",
+                        MagicMock(return_value=saved_name))
+    monkeypatch.setattr(sys, "argv", ["prog", "--link", "https://youtube.com/a"])
+
+    # A console that cannot encode U+FF02, as on stock Windows
+    buffer = io.BytesIO()
+    monkeypatch.setattr(sys, "stdout",
+                        io.TextIOWrapper(buffer, encoding="cp1252", errors="strict"))
+
+    exit_code = main.main()
+
+    sys.stdout.flush()
+    assert exit_code == 0, "successful download must not be reported as a failure"
+
+
+def test_configure_console_encoding_survives_odd_streams(monkeypatch):
+    """Must not explode when stdout is not a reconfigurable text stream."""
+    class NoReconfigure:
+        pass
+
+    monkeypatch.setattr(sys, "stdout", NoReconfigure())
+    monkeypatch.setattr(sys, "stderr", NoReconfigure())
+    main.configure_console_encoding()  # no exception
+
+
 def test_version_flag(monkeypatch):
     """Test that --version prints the version and exits."""
     from io import StringIO
