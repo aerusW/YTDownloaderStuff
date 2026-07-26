@@ -1,6 +1,7 @@
 import os
 import sys
 import re
+import glob
 import subprocess
 from tqdm import tqdm
 from yt_dlp import YoutubeDL
@@ -33,12 +34,17 @@ def get_next_video_filename(folder: str, ext: str = "mp4") -> str:
     """
     Find the next available sequential filename like video001.mp4 in the folder.
     The extension follows the chosen container (mp4 or mkv).
+
+    A slot counts as taken if video### exists under *any* extension. Checking
+    only the target extension used to hand out video001.mp4 in a folder that
+    already held video001.mkv, producing pairs that are indistinguishable by
+    name and hiding which run produced which file.
     """
     i = 1
     while True:
-        filename = os.path.join(folder, f"video{i:03}.{ext}")
-        if not os.path.exists(filename):
-            return filename
+        stem = os.path.join(folder, f"video{i:03}")
+        if not glob.glob(glob.escape(stem) + ".*"):
+            return f"{stem}.{ext}"
         i += 1
 
 
