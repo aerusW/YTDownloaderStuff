@@ -9,7 +9,7 @@ import src.configmanager as configmanager
 import src.console as console
 import subprocess
 
-version: str = "1.0.2 master"
+version: str = "1.1.0 master"
 def configure_console_encoding():
     """
     Make stdout/stderr tolerate characters outside the console's code page.
