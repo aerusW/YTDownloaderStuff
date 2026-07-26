@@ -74,6 +74,25 @@ def test_aac_temp_path_preserves_directory_containing_extension():
 def test_aac_temp_path_non_mp4_extension():
     assert downloadtool.aac_temp_path("/v/a.mkv") == "/v/a_aac.mkv"
 
+# reported output path tests
+def test_read_reported_path(tmp_path):
+    report = tmp_path / "filepath.txt"
+    report.write_text("C:\\videos\\video001.mkv\n", encoding="utf-8")
+    assert downloadtool.read_reported_path(str(report)) == "C:\\videos\\video001.mkv"
+
+def test_read_reported_path_uses_last_line(tmp_path):
+    report = tmp_path / "filepath.txt"
+    report.write_text("first.mp4\nsecond.mkv\n", encoding="utf-8")
+    assert downloadtool.read_reported_path(str(report)) == "second.mkv"
+
+def test_read_reported_path_empty_file(tmp_path):
+    report = tmp_path / "filepath.txt"
+    report.write_text("\n  \n", encoding="utf-8")
+    assert downloadtool.read_reported_path(str(report)) == ""
+
+def test_read_reported_path_missing_file(tmp_path):
+    assert downloadtool.read_reported_path(str(tmp_path / "nope.txt")) == ""
+
 # convert audio to aac tests
 def test_ffprobe_failure(monkeypatch):
 
