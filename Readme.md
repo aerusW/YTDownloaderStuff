@@ -163,6 +163,30 @@ python -m pytest -v
 * Configurable **segments, connections, and segment size** for optimal download speed
 * Automatic MP4 merging
 
+## Terminal output
+
+Output is grouped into one block per video and reflows to the terminal width,
+re-measured on every redraw so resizing mid-download does not smear the
+progress bar:
+
+```text
+── 2/6 ──────────────────────────────────────────────────────
+  https://youtu.be/KOpTWx1Eou4
+  Fireship - The most interesting ＂hack＂ in his…[KOpT].mp4
+   45% ━━━━━━━━━──────────  16MiB/s · ETA 8s
+  ▸ merging video and audio
+  ✓ saved · 15.9 MB
+──────────────────────────────────────────────────────────────
+✓ 5 downloaded · 1 skipped
+```
+
+Two environment variables control appearance:
+
+| Variable | Effect |
+|---|---|
+| `NO_COLOR=1` | Disable colour (also off automatically when piped or redirected) |
+| `YTDOWNLOAD_ASCII=1` | Use `-`, `+`, `...` instead of box-drawing and Unicode symbols, for legacy consoles that cannot render them |
+
 ## Requirements checked at startup
 
 `yt-dlp`, `ffmpeg`, `ffprobe` and `aria2c` must all be on PATH. Missing tools are

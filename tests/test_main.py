@@ -236,7 +236,7 @@ def test_batch_all_success_returns_zero(monkeypatch, mock_config, mock_logging,
 
     assert exit_code == 0
     assert mock_download.call_count == 2
-    assert "All 2 download(s) completed" in capsys.readouterr().out
+    assert "2 downloaded" in capsys.readouterr().out
 
 
 def test_keyboard_interrupt_stops_batch(monkeypatch, mock_config, mock_logging,
@@ -254,7 +254,7 @@ def test_keyboard_interrupt_stops_batch(monkeypatch, mock_config, mock_logging,
 
     assert mock_dl.call_count == 1  # stopped, did not attempt b and c
     assert exit_code == 1
-    assert "ABORTED" in capsys.readouterr().out
+    assert "interrupted" in capsys.readouterr().out
 
 
 # ---------------------------
@@ -308,7 +308,7 @@ def test_skipped_downloads_counted_separately(monkeypatch, mock_config, mock_log
     exit_code = main.main()
 
     assert exit_code == 0
-    assert "2 already in archive" in capsys.readouterr().out
+    assert "2 skipped" in capsys.readouterr().out
 
 
 # ---------------------------
