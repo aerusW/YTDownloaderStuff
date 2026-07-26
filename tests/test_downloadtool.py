@@ -219,6 +219,54 @@ def test_no_ytdlp_python_api_dependency():
     assert "YoutubeDL" not in source
     assert "yt_dlp" not in source
 
+# download archive tests
+def test_archive_flag_passed_through(monkeypatch, tmp_path):
+    archive = str(tmp_path / ".download-archive.txt")
+    command, _ = run_download(monkeypatch, tmp_path, download_archive=archive)
+    assert "--download-archive" in command
+    assert command[command.index("--download-archive") + 1] == archive
+
+def test_no_archive_flag_when_disabled(monkeypatch, tmp_path):
+    command, _ = run_download(monkeypatch, tmp_path, download_archive=None)
+    assert "--download-archive" not in command
+
+def test_default_archive_path():
+    assert downloadtool.default_archive_path("/videos").endswith(".download-archive.txt")
+    assert os.path.dirname(downloadtool.default_archive_path("/videos")) == "/videos"
+
+def test_already_archived_returns_none(monkeypatch, tmp_path):
+    """
+    A skipped video writes no file and exits 0; that must not be reported as a
+    download whose output went missing.
+    """
+    recorded = []
+    # produced_file=None so the report file stays empty, as on a real skip
+    monkeypatch.setattr(downloadtool.subprocess, "Popen", fake_ytdlp(
+        recorded, None,
+        stdout_lines=[f"[download] abc123: {downloadtool.ARCHIVE_SKIP_MARKER}"],
+    ))
+    monkeypatch.setattr(downloadtool, "probe_audio_codec", lambda p: "opus")
+
+    result = downloadtool.download_video(
+        "https://youtu.be/abc123", "1080", str(tmp_path / "video001.mp4"),
+        segments=16, max_connections=16, segment_size=4, concurrent_segments=10,
+        download_archive=str(tmp_path / "archive.txt"),
+    )
+    assert result is None
+
+def test_missing_output_without_skip_is_an_error(monkeypatch, tmp_path):
+    """Empty report and no skip marker means the output really did go missing."""
+    recorded = []
+    monkeypatch.setattr(downloadtool.subprocess, "Popen",
+                        fake_ytdlp(recorded, None, stdout_lines=[]))
+    monkeypatch.setattr(downloadtool, "probe_audio_codec", lambda p: "opus")
+
+    with pytest.raises(RuntimeError, match="missing"):
+        downloadtool.download_video(
+            "https://youtu.be/abc123", "1080", str(tmp_path / "nonexistent.mp4"),
+            segments=16, max_connections=16, segment_size=4, concurrent_segments=10,
+        )
+
 # convert audio to aac tests
 def test_ffprobe_failure(monkeypatch):
 
