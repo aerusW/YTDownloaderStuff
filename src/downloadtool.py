@@ -191,6 +191,17 @@ def read_reported_path(report_file: str) -> str:
     return lines[-1] if lines else ""
 
 
+# Default naming: channel, title and video id. The id keeps the name unique
+# when a channel reposts a title, and makes the file traceable back to YouTube.
+# "%(channel,uploader|Unknown)s" falls back to uploader, then to a literal, so
+# a missing field never produces a filename starting with "NA - ".
+#
+# The ".60s" / ".120s" are per-field length caps, keeping the name inside
+# Windows' 260-char path limit. Do NOT use --trim-filenames for this: that
+# option truncates the whole output path, so a long download folder gets its
+# trailing directories chopped off and files land in the wrong folder.
+DEFAULT_OUTPUT_TEMPLATE = "%(channel,uploader|Unknown).60s - %(title).120s [%(id)s].%(ext)s"
+
 ARCHIVE_SKIP_MARKER = "has already been recorded in the archive"
 
 # Default archive filename, kept inside the download folder so the record
@@ -202,13 +213,18 @@ def default_archive_path(folder: str) -> str:
     return os.path.join(folder, DEFAULT_ARCHIVE_NAME)
 
 
-def download_video(url: str, quality: str, output_filename: str, segments: int, max_connections: int, segment_size: int, concurrent_segments: int, skip_conversion: bool = False, verbose: bool = False, cookies_from_browser: str = None, cookies_file: str = None, js_runtime: str = "deno", remote_components: str = "ejs:github", download_archive: str = None):
+def download_video(url: str, quality: str, output_filename: str, segments: int, max_connections: int, segment_size: int, concurrent_segments: int, skip_conversion: bool = False, verbose: bool = False, cookies_from_browser: str = None, cookies_file: str = None, js_runtime: str = "deno", remote_components: str = "ejs:github", download_archive: str = None, output_template: str = None, embed_metadata: bool = True):
     """
     Download a YouTube video with yt-dlp using aria2.
     Converts audio to AAC after download (MP4 path only).
 
     Returns the path actually written, or None if the video was skipped because
     it is already recorded in download_archive.
+
+    output_template: full yt-dlp -o template. When None, output_filename's stem
+        is used instead, giving the legacy sequential videoNNN naming.
+    embed_metadata: write title/channel/upload date into the container's tags,
+        so the information survives even if the file is later renamed.
 
     download_archive: path to a yt-dlp archive file. Videos listed there are
         skipped, making re-runs of the same batch idempotent instead of
@@ -259,9 +275,11 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
         "--external-downloader", "aria2c",
         "--external-downloader-args", f"aria2c:-x {max_connections} -s {segments} -k {segment_size}M --file-allocation=none --summary-interval=1 --console-log-level=warn --disable-ipv6=true", # --disable-ipv6: Google's CDN often resolves to IPv6; forcing IPv4 avoids "unreachable network" failures on IPv4-only connections
         "--concurrent-fragments", f"{concurrent_segments}",
-        "-o", f"{base_name}.%(ext)s",
+        "-o", output_template or f"{base_name}.%(ext)s",
         url
     ]
+    if embed_metadata:
+        command[1:1] = ["--embed-metadata"]
     if cookies_from_browser:
         command[1:1] = ["--cookies-from-browser", cookies_from_browser]
     if cookies_file:

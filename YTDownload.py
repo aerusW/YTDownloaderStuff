@@ -8,6 +8,25 @@ import src.configmanager as configmanager
 import subprocess
 
 version: str = "1.0.2 master"
+def configure_console_encoding():
+    """
+    Make stdout/stderr tolerate characters outside the console's code page.
+
+    Windows consoles default to a legacy code page (cp1252), so printing a
+    filename raises UnicodeEncodeError as soon as the title contains anything
+    outside it. This is common rather than exotic: yt-dlp sanitises ASCII quotes
+    in titles into fullwidth quotes (U+FF02), which cp1252 cannot encode. A
+    download that already succeeded must not be reported as failed because its
+    name could not be printed.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
+            # Not a reconfigurable text stream (e.g. captured during tests).
+            pass
+
+
 def get_link_from_user() -> str:
     """Prompt the user to enter a YouTube URL if not provided as a flag."""
     return input("Enter YouTube video URL: ").strip()
@@ -57,6 +76,8 @@ def check_ffmpeg_installed() -> bool:
     return check_binary("ffmpeg")
 
 def main():
+    configure_console_encoding()
+
     # Load config
     config = configmanager.load_config()
 
@@ -89,6 +110,9 @@ def main():
     parser.add_argument("--connections", type=int, help="Number of connections per segment for aria2 download")
     parser.add_argument("--segment-size", type=int, help="Segment size in MB for aria2 download")
     parser.add_argument("--do-not-convert", action="store_true", help="Skip audio conversion to AAC")
+    parser.add_argument("--sequential-names", action="store_true", help="Use the legacy videoNNN.ext naming instead of 'Channel - Title [id].ext'")
+    parser.add_argument("--output-template", type=str, help="Custom yt-dlp output template (overrides the default naming)")
+    parser.add_argument("--no-metadata", action="store_true", help="Do not embed title/channel metadata tags into the downloaded file")
     parser.add_argument("--archive", type=str, help="Path to the download archive file recording what has already been fetched (default: .download-archive.txt inside the download folder)")
     parser.add_argument("--no-archive", action="store_true", help="Ignore the download archive and re-download even if the video was fetched before")
     parser.add_argument("--concurrent-segments", type=int, help="Number of concurrent segments for yt-dlp")
@@ -151,9 +175,24 @@ def main():
     failures = []
     skipped = []
 
+    # Naming: descriptive by default, legacy sequential on request.
+    if args.sequential_names:
+        final_template = None
+    else:
+        final_template = os.path.join(
+            final_folder,
+            args.output_template or config.get("output_template",
+                                               downloadtool.DEFAULT_OUTPUT_TEMPLATE)
+        )
+
     for index, url in enumerate(urls, start=1):
-        # Determine next sequential filename (extension follows the container)
-        output_filename = downloadtool.get_next_video_filename(final_folder, ext=container)
+        # Sequential naming needs the next free slot; template naming is resolved
+        # by yt-dlp itself, so skip the directory scan entirely in that case.
+        output_filename = (
+            downloadtool.get_next_video_filename(final_folder, ext=container)
+            if final_template is None
+            else os.path.join(final_folder, f"video.{container}")
+        )
         print(f"[INFO] Downloading ({index}/{len(urls)}): {url}")
         try:
             written = downloadtool.download_video(
@@ -169,10 +208,14 @@ def main():
                 cookies_from_browser=final_cookies_browser,
                 cookies_file=final_cookies_file,
                 js_runtime=final_js_runtime,
-                download_archive=final_archive
+                download_archive=final_archive,
+                output_template=final_template,
+                embed_metadata=not args.no_metadata
             )
             if written is None:
                 skipped.append(url)
+            else:
+                print(f"[INFO] Saved: {os.path.basename(written)}")
         except KeyboardInterrupt:
             # Ctrl-C is a deliberate stop: abandon the whole batch.
             print("\n[ABORTED] Interrupted by user; skipping remaining downloads.")
