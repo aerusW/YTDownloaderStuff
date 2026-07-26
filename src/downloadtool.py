@@ -48,6 +48,18 @@ def get_next_video_filename(folder: str, ext: str = "mp4") -> str:
         i += 1
 
 
+def aac_temp_path(path: str) -> str:
+    """
+    Scratch path ffmpeg writes the AAC remux to, before it replaces the original.
+
+    Uses splitext rather than str.replace(".mp4", ...): replace() rewrites every
+    occurrence, so a folder such as D:\\clips.mp4.old\\ would have its directory
+    name mangled and the rename would land somewhere that does not exist.
+    """
+    stem, suffix = os.path.splitext(path)
+    return f"{stem}_aac{suffix}"
+
+
 def convert_audio_to_aac(filename: str, verbose: bool = False):
     """
     Convert video audio to AAC using ffmpeg.
@@ -55,7 +67,7 @@ def convert_audio_to_aac(filename: str, verbose: bool = False):
     Displays a tqdm progress bar.
     """
     abs_input = os.path.abspath(filename)
-    temp_file = abs_input.replace(".mp4", "_aac.mp4")
+    temp_file = aac_temp_path(abs_input)
 
     # Get total duration using ffprobe
     probe_cmd = [
