@@ -12,9 +12,21 @@ import shutil
 def build_format_string(quality: str) -> str: # Builds the yt-dlp format string based on the desired quality.
     # For 720/1080/4k this grabs the AVC/AAC version directly from YouTube (MP4-friendly).
     # For "premium" it targets format 616 — YouTube's enhanced-bitrate 1080p VP9 stream,
-    # only served to logged-in Premium accounts (requires cookies). Falls back to normal 1080p.
+    # only served to logged-in Premium accounts (requires cookies).
     if quality == "premium":
-        return "616+bestaudio/bestvideo[height<=1080]+bestaudio/b"
+        # The fallback chain is spelled out so it cannot silently drift from the
+        # documented intent. The previous "616+bestaudio/bestvideo[height<=1080]
+        # +bestaudio/b" left tier 2 uncodeced, so without cookies it quietly
+        # returned AV1 while the docs promised VP9.
+        #
+        # vcodec~='^vp0?9' matches both spellings YouTube uses: bare "vp9" and
+        # the ISO-style "vp09.00.40.08".
+        return (
+            "616+bestaudio"                                  # enhanced 1080p VP9 (Premium + cookies)
+            "/bv*[height<=1080][vcodec~='^vp0?9']+bestaudio"  # standard 1080p VP9
+            "/bv*[height<=1080]+bestaudio"                    # any 1080p (AV1/AVC)
+            "/b"                                              # whatever is left
+        )
     elif quality == "4k":
         return "bv*[height<=2160][vcodec^=avc1]+ba[ext=m4a]/b[ext=mp4]/b"
     elif quality == "720":
