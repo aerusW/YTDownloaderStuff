@@ -1,5 +1,5 @@
 import argparse
-# import sys
+import sys
 import os
 import src.loggingtool as loggingtool
 import src.downloadtool as downloadtool
@@ -95,23 +95,55 @@ def main():
 
     container = downloadtool.container_for_quality(args.quality)
 
-    for url in urls:
+    # One bad URL must not abandon the rest of the batch: record the failure,
+    # keep going, and report everything that went wrong at the end.
+    failures = []
+
+    for index, url in enumerate(urls, start=1):
         # Determine next sequential filename (extension follows the container)
         output_filename = downloadtool.get_next_video_filename(final_folder, ext=container)
-        print(f"[INFO] Downloading: {url}")
-        downloadtool.download_video(
-            url,
-            args.quality,
-            output_filename,
-            final_segments,
-            final_connections,
-            final_segment_size,
-            final_concurrent_segments,
-            skip_conversion=args.do_not_convert,
-            verbose=args.verbose,
-            cookies_from_browser=final_cookies_browser,
-            cookies_file=final_cookies_file,
-            js_runtime=final_js_runtime
-        )
+        print(f"[INFO] Downloading ({index}/{len(urls)}): {url}")
+        try:
+            downloadtool.download_video(
+                url,
+                args.quality,
+                output_filename,
+                final_segments,
+                final_connections,
+                final_segment_size,
+                final_concurrent_segments,
+                skip_conversion=args.do_not_convert,
+                verbose=args.verbose,
+                cookies_from_browser=final_cookies_browser,
+                cookies_file=final_cookies_file,
+                js_runtime=final_js_runtime
+            )
+        except KeyboardInterrupt:
+            # Ctrl-C is a deliberate stop: abandon the whole batch.
+            print("\n[ABORTED] Interrupted by user; skipping remaining downloads.")
+            failures.append((url, "aborted by user"))
+            break
+        except Exception as exc:
+            loggingtool.logging.error("Failed to download %s: %s", url, exc)
+            print(f"[ERROR] Failed: {url} ({exc})")
+            print("[INFO] Continuing with the next URL.")
+            failures.append((url, str(exc)))
+
+    return report_results(len(urls), failures, log_file)
+
+
+def report_results(total: int, failures: list, log_file: str) -> int:
+    """Print a batch summary and return the process exit code."""
+    succeeded = total - len(failures)
+
+    if not failures:
+        print(f"\n[SUCCESS] All {total} download(s) completed.")
+        return 0
+
+    print(f"\n[SUMMARY] {succeeded}/{total} succeeded, {len(failures)} failed:")
+    for url, reason in failures:
+        print(f"  - {url}\n      {reason}")
+    print(f"[INFO] Details in {log_file}")
+    return 1
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
