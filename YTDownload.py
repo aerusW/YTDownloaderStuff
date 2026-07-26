@@ -39,7 +39,10 @@ def main():
     )
 
     parser.add_argument("--link", action="append", type=str, help="YouTube video URL (can be repeated)")
-    parser.add_argument("--quality", choices=["720", "1080", "4k"], default="1080", help="Maximum video quality")
+    parser.add_argument("--quality", choices=["720", "1080", "premium", "4k"], default="1080", help="Video quality. 'premium' targets YouTube's enhanced 1080p (format 616, VP9) saved as MKV — requires cookies from a logged-in Premium account")
+    parser.add_argument("--cookies-from-browser", type=str, help="Browser to pull cookies from, e.g. 'firefox' or 'firefox:C:\\path\\to\\profile'. Needed for 'premium' quality and to satisfy YouTube's bot check. Note: Chrome/Edge are blocked by App-Bound Encryption on Windows")
+    parser.add_argument("--cookies-file", type=str, help="Path to a Netscape cookies.txt to authenticate with (alternative to --cookies-from-browser; survives uninstalling the browser)")
+    parser.add_argument("--js-runtime", type=str, help="JavaScript runtime for YouTube's 'n challenge' (default: deno)")
     parser.add_argument("--folder", type=str, help="Output folder for downloaded videos (overrides config)")
     parser.add_argument("--log-folder", type=str, help="Folder where log files will be stored (overrides config)")
     parser.add_argument("--segments", type=int, help="Number of segments for aria2 download")
@@ -61,6 +64,16 @@ def main():
     final_connections = args.connections if args.connections is not None else config.get("default_connections", 16)
     final_segment_size = args.segment_size if args.segment_size is not None else config.get("default_segment_size", 4)
     final_concurrent_segments = args.concurrent_segments if args.concurrent_segments is not None else config.get("concurrent_segments", 10)
+
+    # Resolve cookies source (flag > config). Premium quality needs cookies.
+    final_cookies_browser = args.cookies_from_browser if args.cookies_from_browser else config.get("default_cookies_browser")
+    final_cookies_file = args.cookies_file if args.cookies_file else config.get("default_cookies_file")
+    final_js_runtime = args.js_runtime if args.js_runtime else config.get("default_js_runtime", "deno")
+    if args.quality == "premium" and not (final_cookies_browser or final_cookies_file):
+        print("[WARNING] 'premium' quality needs cookies from a logged-in YouTube Premium account.")
+        print("          Pass --cookies-from-browser firefox (or --cookies-file cookies.txt).")
+        print("          Without them, yt-dlp will fall back to standard 1080p.")
+
     # Prompt user for URL if not provided
     urls = args.link if args.link else []
 
@@ -80,9 +93,11 @@ def main():
     # Setup logging
     log_file = loggingtool.setup_logging(final_log_folder)
 
+    container = downloadtool.container_for_quality(args.quality)
+
     for url in urls:
-        # Determine next sequential filename
-        output_filename = downloadtool.get_next_video_filename(final_folder)
+        # Determine next sequential filename (extension follows the container)
+        output_filename = downloadtool.get_next_video_filename(final_folder, ext=container)
         print(f"[INFO] Downloading: {url}")
         downloadtool.download_video(
             url,
@@ -93,7 +108,10 @@ def main():
             final_segment_size,
             final_concurrent_segments,
             skip_conversion=args.do_not_convert,
-            verbose=args.verbose
+            verbose=args.verbose,
+            cookies_from_browser=final_cookies_browser,
+            cookies_file=final_cookies_file,
+            js_runtime=final_js_runtime
         )
 if __name__ == "__main__":
     main()
