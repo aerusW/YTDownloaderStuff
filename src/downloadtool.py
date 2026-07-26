@@ -191,10 +191,28 @@ def read_reported_path(report_file: str) -> str:
     return lines[-1] if lines else ""
 
 
-def download_video(url: str, quality: str, output_filename: str, segments: int, max_connections: int, segment_size: int, concurrent_segments: int, skip_conversion: bool = False, verbose: bool = False, cookies_from_browser: str = None, cookies_file: str = None, js_runtime: str = "deno", remote_components: str = "ejs:github"):
+ARCHIVE_SKIP_MARKER = "has already been recorded in the archive"
+
+# Default archive filename, kept inside the download folder so the record
+# travels with the library it describes.
+DEFAULT_ARCHIVE_NAME = ".download-archive.txt"
+
+
+def default_archive_path(folder: str) -> str:
+    return os.path.join(folder, DEFAULT_ARCHIVE_NAME)
+
+
+def download_video(url: str, quality: str, output_filename: str, segments: int, max_connections: int, segment_size: int, concurrent_segments: int, skip_conversion: bool = False, verbose: bool = False, cookies_from_browser: str = None, cookies_file: str = None, js_runtime: str = "deno", remote_components: str = "ejs:github", download_archive: str = None):
     """
     Download a YouTube video with yt-dlp using aria2.
     Converts audio to AAC after download (MP4 path only).
+
+    Returns the path actually written, or None if the video was skipped because
+    it is already recorded in download_archive.
+
+    download_archive: path to a yt-dlp archive file. Videos listed there are
+        skipped, making re-runs of the same batch idempotent instead of
+        producing duplicates under fresh sequence numbers.
 
     cookies_from_browser: browser spec (e.g. "chrome" or "firefox:PROFILE_PATH")
         whose cookies yt-dlp should use. Required to unlock Premium formats such as
@@ -248,6 +266,8 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
         command[1:1] = ["--cookies-from-browser", cookies_from_browser]
     if cookies_file:
         command[1:1] = ["--cookies", cookies_file]
+    if download_archive:
+        command[1:1] = ["--download-archive", download_archive]
 
     if verbose:
         print(f"\n[VERBOSE] aria2 settings: {segments} segments, {segment_size}MB chunks, {max_connections} connections, {concurrent_segments} concurrent")
@@ -262,6 +282,7 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
     )
 
     progress_bar = None
+    skipped = False
 
     try:
         # Loop through the output stream to catch errors and print status
@@ -271,6 +292,11 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
                 continue
             
             full_output.append(line)
+
+            # Recorded in the archive: yt-dlp writes no file and exits 0, which
+            # must not be mistaken for a download that lost its output.
+            if ARCHIVE_SKIP_MARKER in line:
+                skipped = True
 
             if verbose:
                 # In verbose mode, just dump the raw terminal output
@@ -322,6 +348,10 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
             print("\n[ERROR] Download failed. See log for details.")
             # sys.exit(1)
             raise RuntimeError("Download failed")
+
+        if skipped:
+            print("[SKIP] Already downloaded (recorded in archive).")
+            return None
 
         print("[SUCCESS] Download finished.")
 
