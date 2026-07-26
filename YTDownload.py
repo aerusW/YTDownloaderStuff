@@ -1,6 +1,7 @@
 import argparse
 import sys
 import os
+import shutil
 import src.loggingtool as loggingtool
 import src.downloadtool as downloadtool
 import src.configmanager as configmanager
@@ -11,22 +12,61 @@ def get_link_from_user() -> str:
     """Prompt the user to enter a YouTube URL if not provided as a flag."""
     return input("Enter YouTube video URL: ").strip()
 
+# Every external binary the download path shells out to: the flag that makes it
+# report its version, and the hint printed when it is missing. aria2c and yt-dlp
+# used to fail deep inside the download with an opaque message instead of up front.
+#
+# The flag differs per tool and is not interchangeable: ffmpeg/ffprobe want the
+# single-dash "-version", while "aria2c -version" is a parse error and
+# "yt-dlp -version" is silently interpreted as --verbose.
+REQUIRED_BINARIES = {
+    "yt-dlp": ("--version", "pip install -U yt-dlp"),
+    "ffmpeg": ("-version", "https://ffmpeg.org/download.html (or: winget install Gyan.FFmpeg)"),
+    "ffprobe": ("-version", "ships with ffmpeg — install the full build, not ffmpeg.exe alone"),
+    "aria2c": ("--version", "https://aria2.github.io (or: winget install aria2.aria2)"),
+}
+
+
+def check_binary(name: str) -> bool:
+    """
+    True if `name` is on PATH and runs. Checks the exit code as well as mere
+    presence, so a broken or truncated install is not reported as working.
+    """
+    if shutil.which(name) is None:
+        return False
+    version_flag = REQUIRED_BINARIES.get(name, ("--version", ""))[0]
+    try:
+        result = subprocess.run(
+            [name, version_flag],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=30,
+        )
+        return result.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def check_dependencies() -> list:
+    """Return the names of required binaries that are missing or non-functional."""
+    return [name for name in REQUIRED_BINARIES if not check_binary(name)]
+
+
 def check_ffmpeg_installed() -> bool:
     """Check if ffmpeg is installed and available in PATH."""
-    try:
-        subprocess.run(["ffmpeg", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return True
-    except FileNotFoundError:
-        return False
+    return check_binary("ffmpeg")
 
 def main():
     # Load config
     config = configmanager.load_config()
-    # Check for ffmpeg
-    if not check_ffmpeg_installed():
-        print("[ERROR] ffmpeg is not installed or not found in PATH. Please install ffmpeg to use this tool.")
-        raise RuntimeError("ffmpeg not found")
-        # sys.exit(1)
+
+    # Check every external tool up front, not just ffmpeg
+    missing = check_dependencies()
+    if missing:
+        print("[ERROR] Required tools are missing or not working:")
+        for name in missing:
+            print(f"  - {name}: {REQUIRED_BINARIES[name][1]}")
+        raise RuntimeError(f"missing dependencies: {', '.join(missing)}")
 
     # Fallback default folder
     home = os.path.expanduser("~")
