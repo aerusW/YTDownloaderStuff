@@ -42,6 +42,25 @@ def test_next_video_filename_mkv_ext(tmp_path):
     result = downloadtool.get_next_video_filename(str(tmp_path), ext="mkv")
     assert result.endswith("video001.mkv")
 
+# Regression: a slot is taken regardless of which extension occupies it
+def test_next_video_filename_skips_other_extensions(tmp_path):
+    (tmp_path / "video001.mkv").touch()
+    result = downloadtool.get_next_video_filename(str(tmp_path), ext="mp4")
+    assert result.endswith("video002.mp4")
+
+def test_next_video_filename_skips_mixed_extensions(tmp_path):
+    for name in ("video001.mkv", "video002.mp4", "video003.webm"):
+        (tmp_path / name).touch()
+    result = downloadtool.get_next_video_filename(str(tmp_path), ext="mkv")
+    assert result.endswith("video004.mkv")
+
+def test_next_video_filename_handles_glob_chars_in_folder(tmp_path):
+    folder = tmp_path / "my [videos]"
+    folder.mkdir()
+    (folder / "video001.mkv").touch()
+    result = downloadtool.get_next_video_filename(str(folder), ext="mp4")
+    assert result.endswith("video002.mp4")
+
 # convert audio to aac tests
 def test_ffprobe_failure(monkeypatch):
 
