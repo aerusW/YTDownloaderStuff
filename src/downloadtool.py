@@ -5,7 +5,6 @@ import glob
 import tempfile
 import subprocess
 from tqdm import tqdm
-from yt_dlp import YoutubeDL
 import src.loggingtool as loggingtool
 import shutil
 
@@ -47,6 +46,31 @@ def get_next_video_filename(folder: str, ext: str = "mp4") -> str:
         if not glob.glob(glob.escape(stem) + ".*"):
             return f"{stem}.{ext}"
         i += 1
+
+
+def probe_audio_codec(path: str) -> str:
+    """
+    Audio codec of an existing file, via ffprobe; "unknown" if it cannot be read.
+
+    Probing the finished file replaces a second yt-dlp metadata pass over the
+    network, and is more accurate: it reports what was actually muxed rather
+    than what the format selector was expected to pick.
+    """
+    try:
+        output = subprocess.check_output(
+            [
+                "ffprobe",
+                "-v", "error",
+                "-select_streams", "a:0",
+                "-show_entries", "stream=codec_name",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                path,
+            ],
+            stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    return output.decode(errors="replace").strip() or "unknown"
 
 
 def aac_temp_path(path: str) -> str:
@@ -176,34 +200,6 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
 
     base_name = os.path.splitext(output_filename)[0]
 
-# --- FIXED LOGIC: Dictionary format for js_runtimes ---
-    audio_codec = "unknown"
-    ydl_opts = {
-        'format': format_string,
-        'quiet': True,
-        # The API expects { "runtime_name": {} } or { "runtime_name": {"path": "..."} }
-        'js_runtimes': {
-            js_runtime: {}
-        }
-    }
-    if cookies_from_browser:
-        # Python API expects a tuple: (browser, profile, keyring, container).
-        # cookies_from_browser may be "browser" or "browser:profile_path".
-        br, _, prof = cookies_from_browser.partition(":")
-        ydl_opts['cookiesfrombrowser'] = (br, prof or None, None, None)
-    if cookies_file:
-        ydl_opts['cookiefile'] = cookies_file
-
-    with YoutubeDL(ydl_opts) as ydl: # Attempt to extract metadata to determine audio codec before downloading
-        try:
-            info = ydl.extract_info(url, download=False)
-            audio_codec = info.get('acodec', 'unknown')
-            if verbose:
-                print(f"[VERBOSE] Detected Audio Codec: {audio_codec}")
-        except Exception as e:
-            if verbose:
-                print(f"[VERBOSE] Could not extract metadata: {e}")
-
     aria_progress_pattern = re.compile(
         r"\[(?:#\w+\s+)?(\d+\.?\d*\w*)\/(\d+\.?\d*\w*)\((\d+)%\)\s+CN:\d+\s+DL:(\d+\.?\d*\w*)\s+ETA:(\d+\w*)\]"
     )
@@ -326,6 +322,9 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
             loggingtool.logging.error("Expected output missing after download: %s", final_path)
             raise RuntimeError(f"Download reported success but {final_path} is missing")
 
+        audio_codec = probe_audio_codec(final_path)
+        if verbose:
+            print(f"[VERBOSE] Detected audio codec: {audio_codec}")
         is_aac = "aac" in audio_codec.lower() or "mp4a" in audio_codec.lower()
 
         # MKV (Premium VP9/AV1 + Opus) is kept as-is — re-muxing to AAC/MP4 would

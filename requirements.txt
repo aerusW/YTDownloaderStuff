@@ -1,3 +1,5 @@
+# yt-dlp is invoked as a CLI binary, not imported. Installing it via pip is the
+# simplest way to get it onto PATH; a standalone binary works equally well.
 yt-dlp>=2024.0.0
 tqdm>=4.66.0
 pytest>=7.4.0
