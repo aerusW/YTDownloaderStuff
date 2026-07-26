@@ -2,9 +2,11 @@ import argparse
 import sys
 import os
 import shutil
+import textwrap
 import src.loggingtool as loggingtool
 import src.downloadtool as downloadtool
 import src.configmanager as configmanager
+import src.console as console
 import subprocess
 
 version: str = "1.0.2 master"
@@ -193,7 +195,7 @@ def main():
             if final_template is None
             else os.path.join(final_folder, f"video.{container}")
         )
-        print(f"[INFO] Downloading ({index}/{len(urls)}): {url}")
+        console.write(console.block_header(index, len(urls), url))
         try:
             written = downloadtool.download_video(
                 url,
@@ -215,16 +217,18 @@ def main():
             if written is None:
                 skipped.append(url)
             else:
-                print(f"[INFO] Saved: {os.path.basename(written)}")
+                size = console.human_size(os.path.getsize(written)) \
+                    if os.path.exists(written) else "unknown size"
+                console.write(console.status(
+                    "ok", f"saved{console.separator()}{size}", "green"))
         except KeyboardInterrupt:
             # Ctrl-C is a deliberate stop: abandon the whole batch.
-            print("\n[ABORTED] Interrupted by user; skipping remaining downloads.")
+            console.write(console.status("fail", "interrupted — stopping batch", "yellow"))
             failures.append((url, "aborted by user"))
             break
         except Exception as exc:
             loggingtool.logging.error("Failed to download %s: %s", url, exc)
-            print(f"[ERROR] Failed: {url} ({exc})")
-            print("[INFO] Continuing with the next URL.")
+            console.write(console.status("fail", str(exc), "red"))
             failures.append((url, str(exc)))
 
     return report_results(len(urls), failures, log_file, skipped)
@@ -234,19 +238,27 @@ def report_results(total: int, failures: list, log_file: str, skipped: list = No
     """Print a batch summary and return the process exit code."""
     skipped = skipped or []
     succeeded = total - len(failures) - len(skipped)
+    sep = console.separator()
+
+    console.write(console.rule())
+
+    tally = f"{succeeded} downloaded"
+    if skipped:
+        tally += f"{sep}{len(skipped)} skipped"
+    if failures:
+        tally += f"{sep}{len(failures)} failed"
 
     if not failures:
-        if skipped:
-            print(f"\n[SUCCESS] {succeeded} downloaded, {len(skipped)} already in archive.")
-        else:
-            print(f"\n[SUCCESS] All {total} download(s) completed.")
+        console.write(console.status("ok", tally, "green", indent=0))
         return 0
 
-    print(f"\n[SUMMARY] {succeeded}/{total} succeeded, "
-          f"{len(skipped)} skipped, {len(failures)} failed:")
+    console.write(console.status("fail", tally, "red", indent=0))
+    # Wrap each failure so long URLs and messages stay inside the window.
     for url, reason in failures:
-        print(f"  - {url}\n      {reason}")
-    print(f"[INFO] Details in {log_file}")
+        console.write(console.field(url, indent=2))
+        for line in textwrap.wrap(reason, max(console.terminal_width() - 6, 20)) or [""]:
+            console.write(console.field(line, indent=6))
+    console.write(console.field(f"details in {log_file}", indent=2))
     return 1
 if __name__ == "__main__":
     sys.exit(main())
