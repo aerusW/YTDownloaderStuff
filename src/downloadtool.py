@@ -6,6 +6,7 @@ import tempfile
 import subprocess
 from tqdm import tqdm
 import src.loggingtool as loggingtool
+import src.console as console
 import shutil
 
 
@@ -118,7 +119,7 @@ def convert_audio_to_aac(filename: str, verbose: bool = False):
     try:
         total_duration = float(subprocess.check_output(probe_cmd).decode().strip())
     except Exception:
-        print("[ERROR] Could not determine video duration.")
+        console.write(console.status("fail", "could not determine video duration", "red"))
         # sys.exit(1)
         raise RuntimeError("Failed to get video duration")
 
@@ -134,7 +135,7 @@ def convert_audio_to_aac(filename: str, verbose: bool = False):
         temp_file
     ]
     if verbose:
-        print(f"[VERBOSE] Executing ffmpeg: {' '.join(ffmpeg_cmd)}\n")
+        console.write(f"[VERBOSE] Executing ffmpeg: {' '.join(ffmpeg_cmd)}\n")
 
     process = subprocess.Popen(
         ffmpeg_cmd,
@@ -143,7 +144,7 @@ def convert_audio_to_aac(filename: str, verbose: bool = False):
         universal_newlines=True
     )
 
-    progress_bar = tqdm(total=total_duration, desc="Converting", unit="s", ncols=100)
+    progress_bar = console.progress_bar("converting", total=total_duration, unit="s")
     time_pattern = re.compile(r"out_time_ms=(\d+)")
 
     try: # Loop through ffmpeg output to update progress bar based on out_time_ms
@@ -161,20 +162,32 @@ def convert_audio_to_aac(filename: str, verbose: bool = False):
         progress_bar.close()
 
         if process.returncode != 0:
-            print("\n[ERROR] FFmpeg conversion failed.")
+            console.write(console.status("fail", "ffmpeg conversion failed", "red"))
             # sys.exit(1)
             raise RuntimeError("FFmpeg conversion failed")
 
         os.remove(abs_input)
         os.rename(temp_file, abs_input)
-        print("[SUCCESS] Audio converted to AAC.")
+        console.write(console.status("ok", "audio converted to AAC", "green"))
 
     except KeyboardInterrupt:
         process.kill()
         progress_bar.close()
-        print("\n[ABORTED]")
+        console.write(console.status("fail", "aborted", "yellow"))
         # sys.exit(1)
         raise RuntimeError("Conversion aborted by user")
+
+def strip_stream_suffix(filename: str) -> str:
+    """
+    Turn a per-stream temp name into the title it belongs to.
+
+    yt-dlp downloads video and audio separately as "<name>.f136.mp4" and
+    "<name>.f140.m4a"; both describe one video, so the format-id and extension
+    are dropped to avoid announcing the same title twice.
+    """
+    stem = os.path.splitext(filename)[0]
+    return re.sub(r"\.f\d+$", "", stem)
+
 
 def read_reported_path(report_file: str) -> str:
     """
@@ -288,8 +301,8 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
         command[1:1] = ["--download-archive", download_archive]
 
     if verbose:
-        print(f"\n[VERBOSE] aria2 settings: {segments} segments, {segment_size}MB chunks, {max_connections} connections, {concurrent_segments} concurrent")
-        print(f"[VERBOSE] Executing yt-dlp: {' '.join(command)}\n")
+        console.write(f"\n[VERBOSE] aria2 settings: {segments} segments, {segment_size}MB chunks, {max_connections} connections, {concurrent_segments} concurrent")
+        console.write(f"[VERBOSE] Executing yt-dlp: {' '.join(command)}\n")
         
     process = subprocess.Popen(
         command,
@@ -301,6 +314,7 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
 
     progress_bar = None
     skipped = False
+    title_shown = None
 
     try:
         # Loop through the output stream to catch errors and print status
@@ -318,26 +332,26 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
 
             if verbose:
                 # In verbose mode, just dump the raw terminal output
-                print(f"[DEBUG] {line}")
+                console.write(f"[DEBUG] {line}")
             else:
                 # In non-verbose mode, manage the clean UI and progress bar
                 if "[download] Destination:" in line:
                     if progress_bar:
-                        progress_bar.n = 100
-                        progress_bar.refresh()
                         progress_bar.close()
                         progress_bar = None
-                    
+
                     filename = line.split("\\")[-1] if "\\" in line else line.split("/")[-1]
-                    print(f"[INFO] Downloading stream: {filename}")
+                    # The title is only knowable from yt-dlp's own output; showing
+                    # it here avoids a second metadata fetch over the network.
+                    if title_shown is None:
+                        title_shown = strip_stream_suffix(filename)
+                        console.write(console.field(title_shown))
 
                 elif "[Merger] Merging formats" in line:
                     if progress_bar:
-                        progress_bar.n = 100
-                        progress_bar.refresh()
                         progress_bar.close()
                         progress_bar = None
-                    print("[INFO] Merging video and audio (this takes a few seconds)...")
+                    console.write(console.status("arrow", "merging video and audio", "dim"))
 
                 else:
                     match = aria_progress_pattern.search(line)
@@ -346,10 +360,13 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
                         percent = int(percent)
 
                         if progress_bar is None:
-                            progress_bar = tqdm(total=100, desc="Downloading", ncols=100)
+                            progress_bar = console.progress_bar("")
 
                         progress_bar.n = percent
-                        progress_bar.set_postfix({"Speed": speed_str, "ETA": eta_str})
+                        console.set_status(
+                            progress_bar,
+                            f"{speed_str}/s{console.separator()}ETA {eta_str}"
+                        )
                         progress_bar.refresh()
 
         process.wait()
@@ -363,40 +380,39 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
         if process.returncode != 0:
             error_message = "\n".join(full_output)
             loggingtool.logging.error("Download failed:\n%s", error_message)
-            print("\n[ERROR] Download failed. See log for details.")
+            console.write(console.status("fail", "download failed (see log)", "red"))
             # sys.exit(1)
             raise RuntimeError("Download failed")
 
         if skipped:
-            print("[SKIP] Already downloaded (recorded in archive).")
+            console.write(console.status("skip", "already downloaded", "dim"))
             return None
 
-        print("[SUCCESS] Download finished.")
 
         # Trust yt-dlp's own report over the predicted name; fall back to the
         # prediction only if nothing was reported.
         final_path = read_reported_path(report_file) or output_filename
         if verbose:
-            print(f"[VERBOSE] yt-dlp wrote: {final_path}")
+            console.write(f"[VERBOSE] yt-dlp wrote: {final_path}")
         if not os.path.exists(final_path):
             loggingtool.logging.error("Expected output missing after download: %s", final_path)
             raise RuntimeError(f"Download reported success but {final_path} is missing")
 
         audio_codec = probe_audio_codec(final_path)
         if verbose:
-            print(f"[VERBOSE] Detected audio codec: {audio_codec}")
+            console.write(f"[VERBOSE] Detected audio codec: {audio_codec}")
         is_aac = "aac" in audio_codec.lower() or "mp4a" in audio_codec.lower()
 
         # MKV (Premium VP9/AV1 + Opus) is kept as-is — re-muxing to AAC/MP4 would
         # break the video stream and throw away the enhanced quality.
         if os.path.splitext(final_path)[1].lower() == ".mkv":
             if verbose:
-                print("[VERBOSE] MKV output — leaving video/Opus audio untouched.")
+                console.write("[VERBOSE] MKV output — leaving video/Opus audio untouched.")
         elif not skip_conversion and not is_aac:
             convert_audio_to_aac(final_path, verbose=verbose)
         elif is_aac:
             if verbose:
-                print("[VERBOSE] Detected audio is already AAC. Skipping conversion.")
+                console.write("[VERBOSE] Detected audio is already AAC. Skipping conversion.")
 
         return final_path
 
@@ -404,7 +420,7 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
         process.kill()
         if progress_bar:
             progress_bar.close()
-        print("\n[ABORTED]")
+        console.write(console.status("fail", "aborted", "yellow"))
         # sys.exit(1)
         raise RuntimeError("Download aborted by user")
     finally:
