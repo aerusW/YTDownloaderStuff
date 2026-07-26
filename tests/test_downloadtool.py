@@ -27,16 +27,25 @@ def fake_ytdlp(recorded_commands, produced_file, stdout_lines=(), returncode=0):
         def kill(self):
             pass
 
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
     return FakeProcess
 
 
-def run_download(monkeypatch, tmp_path, quality="1080", produced_name="video001.mkv", **kwargs):
+def run_download(monkeypatch, tmp_path, quality="1080", produced_name="video001.mkv",
+                 audio_codec="opus", **kwargs):
     """Invoke download_video() with a fake subprocess; return the command it built."""
     produced = tmp_path / produced_name
     produced.write_bytes(b"fake")
     recorded = []
     monkeypatch.setattr(downloadtool.subprocess, "Popen",
                         fake_ytdlp(recorded, produced))
+    # Keep the assertion focused on the yt-dlp command, not on ffprobe.
+    monkeypatch.setattr(downloadtool, "probe_audio_codec", lambda path: audio_codec)
     result = downloadtool.download_video(
         "https://youtu.be/abc123", quality, str(tmp_path / "video001.mp4"),
         segments=16, max_connections=16, segment_size=4, concurrent_segments=10,
@@ -148,6 +157,39 @@ def test_command_reports_final_path(monkeypatch, tmp_path):
     assert command[idx + 1] == "after_move:%(filepath)s"
     # download_video returns the path yt-dlp reported, not the predicted one
     assert result == str(tmp_path / "video001.mkv")
+
+# audio codec probing tests
+def test_probe_audio_codec(monkeypatch):
+    monkeypatch.setattr(downloadtool.subprocess, "check_output",
+                        lambda *a, **kw: b"opus\n")
+    assert downloadtool.probe_audio_codec("x.mkv") == "opus"
+
+def test_probe_audio_codec_handles_failure(monkeypatch):
+    def boom(*a, **kw):
+        raise subprocess.CalledProcessError(1, "ffprobe")
+    monkeypatch.setattr(downloadtool.subprocess, "check_output", boom)
+    assert downloadtool.probe_audio_codec("x.mkv") == "unknown"
+
+def test_probe_audio_codec_handles_missing_binary(monkeypatch):
+    def boom(*a, **kw):
+        raise FileNotFoundError("ffprobe")
+    monkeypatch.setattr(downloadtool.subprocess, "check_output", boom)
+    assert downloadtool.probe_audio_codec("x.mkv") == "unknown"
+
+def test_probe_audio_codec_empty_output(monkeypatch):
+    monkeypatch.setattr(downloadtool.subprocess, "check_output", lambda *a, **kw: b"\n")
+    assert downloadtool.probe_audio_codec("x.mkv") == "unknown"
+
+def test_no_ytdlp_python_api_dependency():
+    """
+    The download path shells out to the yt-dlp binary only. Importing the
+    Python package too meant both had to be installed and version-matched,
+    and every video paid for two extractions (n-challenge solved twice).
+    """
+    import inspect
+    source = inspect.getsource(downloadtool)
+    assert "YoutubeDL" not in source
+    assert "yt_dlp" not in source
 
 # convert audio to aac tests
 def test_ffprobe_failure(monkeypatch):
