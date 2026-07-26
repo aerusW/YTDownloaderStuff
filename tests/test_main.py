@@ -42,8 +42,8 @@ def mock_download(monkeypatch):
 
 @pytest.fixture
 def mock_ffmpeg(monkeypatch):
-    """Mock ffmpeg check to always return True."""
-    monkeypatch.setattr(main, "check_ffmpeg_installed", lambda: True)
+    """Pretend every external tool is installed and working."""
+    monkeypatch.setattr(main, "check_dependencies", lambda: [])
 
 
 # ---------------------------
@@ -86,11 +86,66 @@ def test_main_no_url_provided(monkeypatch, mock_config, mock_logging, mock_ffmpe
 
 
 def test_ffmpeg_not_installed(monkeypatch, mock_config):
-    monkeypatch.setattr(main, "check_ffmpeg_installed", lambda: False)
+    monkeypatch.setattr(main, "check_dependencies", lambda: ["ffmpeg"])
     monkeypatch.setattr(sys, "argv", ["prog", "--link", "https://youtube.com/test"])
 
-    with pytest.raises(RuntimeError, match="ffmpeg not found"):
+    with pytest.raises(RuntimeError, match="missing dependencies: ffmpeg"):
         main.main()
+
+
+def test_missing_aria2c_reported(monkeypatch, mock_config, capsys):
+    """aria2c used to fail deep inside the download; it must be caught up front."""
+    monkeypatch.setattr(main, "check_dependencies", lambda: ["aria2c", "ffprobe"])
+    monkeypatch.setattr(sys, "argv", ["prog", "--link", "https://youtube.com/test"])
+
+    with pytest.raises(RuntimeError, match="aria2c, ffprobe"):
+        main.main()
+
+    out = capsys.readouterr().out
+    assert "aria2c" in out and "aria2.github.io" in out
+
+
+def test_check_binary_rejects_missing(monkeypatch):
+    monkeypatch.setattr(main.shutil, "which", lambda name: None)
+    assert main.check_binary("ffmpeg") is False
+
+
+def test_check_binary_rejects_nonzero_exit(monkeypatch):
+    """Present but broken must not count as installed."""
+    monkeypatch.setattr(main.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(main.subprocess, "run",
+                        lambda *a, **kw: MagicMock(returncode=1))
+    assert main.check_binary("ffmpeg") is False
+
+
+def test_check_binary_accepts_working(monkeypatch):
+    monkeypatch.setattr(main.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(main.subprocess, "run",
+                        lambda *a, **kw: MagicMock(returncode=0))
+    assert main.check_binary("ffmpeg") is True
+
+
+def test_check_binary_uses_correct_version_flag(monkeypatch):
+    """
+    'aria2c -version' is a parse error and 'yt-dlp -version' means --verbose,
+    so the single-dash ffmpeg convention must not be applied to them.
+    """
+    seen = {}
+
+    def record(cmd, **kwargs):
+        seen[cmd[0]] = cmd[1]
+        return MagicMock(returncode=0)
+
+    monkeypatch.setattr(main.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(main.subprocess, "run", record)
+
+    for name in main.REQUIRED_BINARIES:
+        main.check_binary(name)
+
+    assert seen["ffmpeg"] == "-version"
+    assert seen["ffprobe"] == "-version"
+    assert seen["yt-dlp"] == "--version"
+    assert seen["aria2c"] == "--version"
 
 
 # ---------------------------
