@@ -225,6 +225,9 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
         "-f", format_string,
         "--newline",
         "--no-color",
+        # A shared URL often carries &list=...; without this yt-dlp pulls the
+        # whole playlist into the single filename slot reserved for one video.
+        "--no-playlist",
         "--merge-output-format", container,
         "--print-to-file", "after_move:%(filepath)s", report_file,
         "--external-downloader", "aria2c",

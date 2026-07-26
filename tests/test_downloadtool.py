@@ -1,6 +1,48 @@
-import pytest 
+import os
+import pytest
 import src.downloadtool as downloadtool
 import subprocess
+
+
+# ---------------------------------------------------------------
+# Harness: run download_video() against a fake yt-dlp subprocess so
+# the constructed command line can be asserted on.
+# ---------------------------------------------------------------
+
+def fake_ytdlp(recorded_commands, produced_file, stdout_lines=(), returncode=0):
+    class FakeProcess:
+        def __init__(self, command, **kwargs):
+            recorded_commands.append(command)
+            # Emulate yt-dlp's --print-to-file after_move:%(filepath)s
+            if "--print-to-file" in command and produced_file is not None:
+                report = command[command.index("--print-to-file") + 2]
+                with open(report, "w", encoding="utf-8") as f:
+                    f.write(str(produced_file) + "\n")
+            self.stdout = iter(stdout_lines)
+            self.returncode = returncode
+
+        def wait(self):
+            return self.returncode
+
+        def kill(self):
+            pass
+
+    return FakeProcess
+
+
+def run_download(monkeypatch, tmp_path, quality="1080", produced_name="video001.mkv", **kwargs):
+    """Invoke download_video() with a fake subprocess; return the command it built."""
+    produced = tmp_path / produced_name
+    produced.write_bytes(b"fake")
+    recorded = []
+    monkeypatch.setattr(downloadtool.subprocess, "Popen",
+                        fake_ytdlp(recorded, produced))
+    result = downloadtool.download_video(
+        "https://youtu.be/abc123", quality, str(tmp_path / "video001.mp4"),
+        segments=16, max_connections=16, segment_size=4, concurrent_segments=10,
+        **kwargs
+    )
+    return recorded[0], result
 
 # build format string tests
 def test_build_format_string_4k():
@@ -92,6 +134,20 @@ def test_read_reported_path_empty_file(tmp_path):
 
 def test_read_reported_path_missing_file(tmp_path):
     assert downloadtool.read_reported_path(str(tmp_path / "nope.txt")) == ""
+
+# command construction tests
+def test_command_disables_playlist_expansion(monkeypatch, tmp_path):
+    """A URL carrying &list= must download one video, not the whole playlist."""
+    command, _ = run_download(monkeypatch, tmp_path)
+    assert "--no-playlist" in command
+
+def test_command_reports_final_path(monkeypatch, tmp_path):
+    command, result = run_download(monkeypatch, tmp_path)
+    assert "--print-to-file" in command
+    idx = command.index("--print-to-file")
+    assert command[idx + 1] == "after_move:%(filepath)s"
+    # download_video returns the path yt-dlp reported, not the predicted one
+    assert result == str(tmp_path / "video001.mkv")
 
 # convert audio to aac tests
 def test_ffprobe_failure(monkeypatch):
