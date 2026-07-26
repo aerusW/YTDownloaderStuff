@@ -89,6 +89,8 @@ def main():
     parser.add_argument("--connections", type=int, help="Number of connections per segment for aria2 download")
     parser.add_argument("--segment-size", type=int, help="Segment size in MB for aria2 download")
     parser.add_argument("--do-not-convert", action="store_true", help="Skip audio conversion to AAC")
+    parser.add_argument("--archive", type=str, help="Path to the download archive file recording what has already been fetched (default: .download-archive.txt inside the download folder)")
+    parser.add_argument("--no-archive", action="store_true", help="Ignore the download archive and re-download even if the video was fetched before")
     parser.add_argument("--concurrent-segments", type=int, help="Number of concurrent segments for yt-dlp")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output for debugging")
     parser.add_argument("--version", action="version", version=f"%(prog)s {version}")
@@ -135,16 +137,26 @@ def main():
 
     container = downloadtool.container_for_quality(args.quality)
 
+    # Archive of what has already been fetched, so re-running a batch is
+    # idempotent rather than producing duplicates under fresh sequence numbers.
+    if args.no_archive:
+        final_archive = None
+        print("[INFO] Archive disabled — previously downloaded videos will be fetched again.")
+    else:
+        final_archive = args.archive or config.get("download_archive") \
+            or downloadtool.default_archive_path(final_folder)
+
     # One bad URL must not abandon the rest of the batch: record the failure,
     # keep going, and report everything that went wrong at the end.
     failures = []
+    skipped = []
 
     for index, url in enumerate(urls, start=1):
         # Determine next sequential filename (extension follows the container)
         output_filename = downloadtool.get_next_video_filename(final_folder, ext=container)
         print(f"[INFO] Downloading ({index}/{len(urls)}): {url}")
         try:
-            downloadtool.download_video(
+            written = downloadtool.download_video(
                 url,
                 args.quality,
                 output_filename,
@@ -156,8 +168,11 @@ def main():
                 verbose=args.verbose,
                 cookies_from_browser=final_cookies_browser,
                 cookies_file=final_cookies_file,
-                js_runtime=final_js_runtime
+                js_runtime=final_js_runtime,
+                download_archive=final_archive
             )
+            if written is None:
+                skipped.append(url)
         except KeyboardInterrupt:
             # Ctrl-C is a deliberate stop: abandon the whole batch.
             print("\n[ABORTED] Interrupted by user; skipping remaining downloads.")
@@ -169,18 +184,23 @@ def main():
             print("[INFO] Continuing with the next URL.")
             failures.append((url, str(exc)))
 
-    return report_results(len(urls), failures, log_file)
+    return report_results(len(urls), failures, log_file, skipped)
 
 
-def report_results(total: int, failures: list, log_file: str) -> int:
+def report_results(total: int, failures: list, log_file: str, skipped: list = None) -> int:
     """Print a batch summary and return the process exit code."""
-    succeeded = total - len(failures)
+    skipped = skipped or []
+    succeeded = total - len(failures) - len(skipped)
 
     if not failures:
-        print(f"\n[SUCCESS] All {total} download(s) completed.")
+        if skipped:
+            print(f"\n[SUCCESS] {succeeded} downloaded, {len(skipped)} already in archive.")
+        else:
+            print(f"\n[SUCCESS] All {total} download(s) completed.")
         return 0
 
-    print(f"\n[SUMMARY] {succeeded}/{total} succeeded, {len(failures)} failed:")
+    print(f"\n[SUMMARY] {succeeded}/{total} succeeded, "
+          f"{len(skipped)} skipped, {len(failures)} failed:")
     for url, reason in failures:
         print(f"  - {url}\n      {reason}")
     print(f"[INFO] Details in {log_file}")
