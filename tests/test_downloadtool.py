@@ -15,6 +15,18 @@ def test_build_format_string_default():
     result = downloadtool.build_format_string("something_else")
     assert "1080" in result
 
+def test_build_format_string_premium():
+    # Premium targets YouTube's enhanced 1080p VP9 stream (format 616)
+    result = downloadtool.build_format_string("premium")
+    assert "616" in result
+
+# container selection tests
+def test_container_premium_is_mkv():
+    assert downloadtool.container_for_quality("premium") == "mkv"
+
+def test_container_default_is_mp4():
+    assert downloadtool.container_for_quality("1080") == "mp4"
+
 # next video filename tests
 def test_next_video_filename(tmp_path):
     folder = tmp_path
@@ -25,6 +37,10 @@ def test_next_video_filename(tmp_path):
     result = downloadtool.get_next_video_filename(str(folder))
 
     assert result.endswith("video002.mp4")
+
+def test_next_video_filename_mkv_ext(tmp_path):
+    result = downloadtool.get_next_video_filename(str(tmp_path), ext="mkv")
+    assert result.endswith("video001.mkv")
 
 # convert audio to aac tests
 def test_ffprobe_failure(monkeypatch):

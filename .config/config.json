@@ -1,6 +1,6 @@
 {
-    "default_download_folder": "~\\videos",
-    "default_log_folder": "~\\videos\\.DownloadLogs",
+    "default_download_folder": "~\\Nextcloud\\Videos",
+    "default_log_folder": "~\\Nextcloud\\Videos\\.DownloadLogs",
     "default_segments": 16,
     "default_connections": 16,
     "default_segment_size": 4,

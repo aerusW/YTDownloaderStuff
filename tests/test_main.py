@@ -34,7 +34,7 @@ def mock_logging(monkeypatch):
 @pytest.fixture
 def mock_download(monkeypatch):
     """Mock download functions."""
-    monkeypatch.setattr(main.downloadtool, "get_next_video_filename", lambda folder: "video_001.mp4")
+    monkeypatch.setattr(main.downloadtool, "get_next_video_filename", lambda folder, ext="mp4": f"video_001.{ext}")
     mock_download_video = MagicMock()
     monkeypatch.setattr(main.downloadtool, "download_video", mock_download_video)
     return mock_download_video

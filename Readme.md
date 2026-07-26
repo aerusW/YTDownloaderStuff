@@ -7,7 +7,8 @@ A **Windows-friendly YouTube downloader** with:
 * Clean **tqdm** download progress bars
 * AAC audio conversion for Windows compatibility
 * Automatic merging to MP4
-* Optional quality selection (`720p`, `1080p`, `4k`)
+* Optional quality selection (`720p`, `1080p`, `premium`, `4k`)
+* **Premium 1080p** support (YouTube's enhanced-bitrate VP9 stream, format `616`) saved losslessly as MKV — requires cookies from a logged-in YouTube Premium account
 
 ---
 
@@ -38,16 +39,22 @@ Create a `config.json` file in `~/.config/config.json` if not present:
 
 ```json
 {
-    "default_download_folder": "~\\videos",
-    "default_log_folder": "~\\videos\\.DownloadLogs",
+    "default_download_folder": "~\\Nextcloud\\Videos",
+    "default_log_folder": "~\\Nextcloud\\Videos\\.DownloadLogs",
     "default_segments": 16,
     "default_connections": 16,
     "default_segment_size": 4,
-    "concurrent_segments": 10
+    "concurrent_segments": 10,
+    "default_cookies_browser": "chrome"
 }
 ```
 
 > CLI flags override these settings.
+
+* `default_download_folder` — point this at a folder your media server watches
+  (e.g. a **Nextcloud** synced folder) to stream downloads straight from your PC.
+* `default_cookies_browser` — browser to read cookies from; required for `premium`
+  quality so YouTube serves the enhanced-bitrate stream to your Premium account.
 
 ---
 
@@ -62,9 +69,10 @@ python YTDownload.py --link <YouTube_URL>
 ### With optional arguments
 
 ```text
---link <YouTube_URL>          # YouTube video URL (required if no interactive input)
---quality {720,1080,4k}       # Video quality (default: 1080)
---folder <output_folder>       # Output folder (overrides config.json)
+--link <YouTube_URL>              # YouTube video URL (required if no interactive input)
+--quality {720,1080,premium,4k}  # Video quality (default: 1080). 'premium' = enhanced 1080p VP9 (MKV), needs cookies
+--cookies-from-browser <browser> # Browser to read cookies from (chrome, firefox, edge). Needed for 'premium'
+--folder <output_folder>          # Output folder (overrides config.json)
 --log-folder <log_folder>      # Folder for logs (overrides config.json)
 --segments <n>                 # Number of aria2 segments (overrides config)
 --connections <n>              # Connections per segment (overrides config)
@@ -78,6 +86,16 @@ python YTDownload.py --link <YouTube_URL>
 ```bash
 python YTDownload.py --link https://youtu.be/VIDEOID --quality 4k --segments 12 --connections 12
 ```
+
+**Premium 1080p example** (enhanced VP9 bitrate → MKV, using Chrome cookies):
+
+```bash
+python YTDownload.py --link https://youtu.be/VIDEOID --quality premium --cookies-from-browser chrome
+```
+
+> Premium formats are only served to logged-in YouTube Premium accounts. Make sure
+> you're signed in to YouTube in the chosen browser. Without valid cookies, yt-dlp
+> falls back to standard 1080p.
 
 ## Testing
 
@@ -99,7 +117,8 @@ python -m pytest -v
 
 ## Notes
 
-* Videos are **saved sequentially** in your configured folder by default (`~/Videos/DownloadedVideos`)
+* Videos are **saved sequentially** in your configured folder (set `default_download_folder` to a Nextcloud/media-server folder to stream them from your PC)
+* `premium` quality produces **`.mkv`** files (VP9/Opus, untouched); other qualities produce `.mp4`
 * If no `--link` is provided, you will be prompted to input a URL interactively
 * Flags override the settings in `config.json`
 

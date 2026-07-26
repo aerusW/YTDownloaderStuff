@@ -9,8 +9,12 @@ import shutil
 
 
 def build_format_string(quality: str) -> str: # Builds the yt-dlp format string based on the desired quality.
-    # This grabs the AAC version directly from YouTube.
-    if quality == "4k":
+    # For 720/1080/4k this grabs the AVC/AAC version directly from YouTube (MP4-friendly).
+    # For "premium" it targets format 616 — YouTube's enhanced-bitrate 1080p VP9 stream,
+    # only served to logged-in Premium accounts (requires cookies). Falls back to normal 1080p.
+    if quality == "premium":
+        return "616+bestaudio/bestvideo[height<=1080]+bestaudio/b"
+    elif quality == "4k":
         return "bv*[height<=2160][vcodec^=avc1]+ba[ext=m4a]/b[ext=mp4]/b"
     elif quality == "720":
         return "bv*[height<=720][vcodec^=avc1]+ba[ext=m4a]/b[ext=mp4]/b"
@@ -18,13 +22,21 @@ def build_format_string(quality: str) -> str: # Builds the yt-dlp format string 
         return "bv*[height<=1080][vcodec^=avc1]+ba[ext=m4a]/b[ext=mp4]/b"
 
 
-def get_next_video_filename(folder: str) -> str:
+def container_for_quality(quality: str) -> str:
+    """
+    Premium (VP9) is kept losslessly in MKV; everything else stays MP4.
+    """
+    return "mkv" if quality == "premium" else "mp4"
+
+
+def get_next_video_filename(folder: str, ext: str = "mp4") -> str:
     """
     Find the next available sequential filename like video001.mp4 in the folder.
+    The extension follows the chosen container (mp4 or mkv).
     """
     i = 1
     while True:
-        filename = os.path.join(folder, f"video{i:03}.mp4")
+        filename = os.path.join(folder, f"video{i:03}.{ext}")
         if not os.path.exists(filename):
             return filename
         i += 1
@@ -109,27 +121,45 @@ def convert_audio_to_aac(filename: str, verbose: bool = False):
         # sys.exit(1)
         raise RuntimeError("Conversion aborted by user")
 
-def download_video(url: str, quality: str, output_filename: str, segments: int, max_connections: int, segment_size: int, concurrent_segments: int, skip_conversion: bool = False, verbose: bool = False):
+def download_video(url: str, quality: str, output_filename: str, segments: int, max_connections: int, segment_size: int, concurrent_segments: int, skip_conversion: bool = False, verbose: bool = False, cookies_from_browser: str = None, cookies_file: str = None, js_runtime: str = "deno", remote_components: str = "ejs:github"):
     """
     Download a YouTube video with yt-dlp using aria2.
-    Converts audio to AAC after download.
+    Converts audio to AAC after download (MP4 path only).
+
+    cookies_from_browser: browser spec (e.g. "chrome" or "firefox:PROFILE_PATH")
+        whose cookies yt-dlp should use. Required to unlock Premium formats such as
+        616 (1080p enhanced VP9) and to satisfy YouTube's bot check.
+    cookies_file:  path to a Netscape cookies.txt (alternative to reading a live
+        browser; survives uninstalling the browser).
+    js_runtime:    JavaScript runtime used to solve YouTube's "n challenge"
+        (default "deno" — required by current YouTube; "node" also possible).
+    remote_components: yt-dlp EJS solver source (default "ejs:github"); needed so
+        the challenge solver script stays up to date, else formats go missing.
     """
     full_output = []
     format_string = build_format_string(quality)
+    container = container_for_quality(quality)
 
     base_name = os.path.splitext(output_filename)[0]
 
 # --- FIXED LOGIC: Dictionary format for js_runtimes ---
     audio_codec = "unknown"
     ydl_opts = {
-        'format': format_string, 
-        'quiet': True, 
+        'format': format_string,
+        'quiet': True,
         # The API expects { "runtime_name": {} } or { "runtime_name": {"path": "..."} }
         'js_runtimes': {
-            'node': {}  # Enabling node with default config
+            js_runtime: {}
         }
     }
-    
+    if cookies_from_browser:
+        # Python API expects a tuple: (browser, profile, keyring, container).
+        # cookies_from_browser may be "browser" or "browser:profile_path".
+        br, _, prof = cookies_from_browser.partition(":")
+        ydl_opts['cookiesfrombrowser'] = (br, prof or None, None, None)
+    if cookies_file:
+        ydl_opts['cookiefile'] = cookies_file
+
     with YoutubeDL(ydl_opts) as ydl: # Attempt to extract metadata to determine audio codec before downloading
         try:
             info = ydl.extract_info(url, download=False)
@@ -146,18 +176,23 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
     
     command = [ # Construct the yt-dlp command with aria2 and progress parsing
         "yt-dlp",
-        "--js-runtimes", "node",
+        "--js-runtimes", js_runtime,
+        "--remote-components", remote_components,
         "-f", format_string,
         "--newline",
         "--no-color",
-        "--merge-output-format", "mp4",
+        "--merge-output-format", container,
         "--external-downloader", "aria2c",
-        "--external-downloader-args", f"aria2c:-x {max_connections} -s {segments} -k {segment_size}M --file-allocation=none --summary-interval=1 --console-log-level=warn", # Adjusted aria2c arguments for better performance and progress reporting
+        "--external-downloader-args", f"aria2c:-x {max_connections} -s {segments} -k {segment_size}M --file-allocation=none --summary-interval=1 --console-log-level=warn --disable-ipv6=true", # --disable-ipv6: Google's CDN often resolves to IPv6; forcing IPv4 avoids "unreachable network" failures on IPv4-only connections
         "--concurrent-fragments", f"{concurrent_segments}",
-        "-o", f"{base_name}.%(ext)s", 
+        "-o", f"{base_name}.%(ext)s",
         url
     ]
-    
+    if cookies_from_browser:
+        command[1:1] = ["--cookies-from-browser", cookies_from_browser]
+    if cookies_file:
+        command[1:1] = ["--cookies", cookies_file]
+
     if verbose:
         print(f"\n[VERBOSE] aria2 settings: {segments} segments, {segment_size}MB chunks, {max_connections} connections, {concurrent_segments} concurrent")
         print(f"[VERBOSE] Executing yt-dlp: {' '.join(command)}\n")
@@ -234,8 +269,13 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
 
         print("[SUCCESS] Download finished.")
         is_aac = "aac" in audio_codec.lower() or "mp4a" in audio_codec.lower()
-        
-        if not skip_conversion and not is_aac:
+
+        # MKV (Premium VP9/AV1 + Opus) is kept as-is — re-muxing to AAC/MP4 would
+        # break the video stream and throw away the enhanced quality.
+        if container == "mkv":
+            if verbose:
+                print("[VERBOSE] MKV output — leaving video/Opus audio untouched.")
+        elif not skip_conversion and not is_aac:
             convert_audio_to_aac(output_filename, verbose=verbose)
         elif is_aac:
             if verbose:
