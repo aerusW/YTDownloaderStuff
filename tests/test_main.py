@@ -140,6 +140,67 @@ def test_all_flags(monkeypatch, mock_config, mock_logging, mock_download, mock_f
     assert args2[0] == urls[1]
 
 
+# ---------------------------
+# Batch resilience
+# ---------------------------
+
+def test_batch_continues_after_failure(monkeypatch, mock_config, mock_logging, mock_ffmpeg, capsys):
+    """A failing URL must not abandon the URLs after it."""
+    urls = ["https://youtube.com/bad", "https://youtube.com/good1", "https://youtube.com/good2"]
+
+    def flaky_download(url, *args, **kwargs):
+        if url.endswith("bad"):
+            raise RuntimeError("Download failed")
+
+    monkeypatch.setattr(main.downloadtool, "get_next_video_filename",
+                        lambda folder, ext="mp4": f"video_001.{ext}")
+    mock_dl = MagicMock(side_effect=flaky_download)
+    monkeypatch.setattr(main.downloadtool, "download_video", mock_dl)
+    monkeypatch.setattr(sys, "argv", ["prog"] + [a for u in urls for a in ("--link", u)])
+
+    exit_code = main.main()
+
+    # All three were attempted despite the first one failing
+    assert mock_dl.call_count == 3
+    assert [c.args[0] for c in mock_dl.call_args_list] == urls
+
+    # Non-zero exit and the failing URL named in the summary
+    assert exit_code == 1
+    out = capsys.readouterr().out
+    assert "1 failed" in out
+    assert "https://youtube.com/bad" in out
+
+
+def test_batch_all_success_returns_zero(monkeypatch, mock_config, mock_logging,
+                                        mock_download, mock_ffmpeg, capsys):
+    monkeypatch.setattr(sys, "argv", ["prog", "--link", "https://youtube.com/a",
+                                      "--link", "https://youtube.com/b"])
+
+    exit_code = main.main()
+
+    assert exit_code == 0
+    assert mock_download.call_count == 2
+    assert "All 2 download(s) completed" in capsys.readouterr().out
+
+
+def test_keyboard_interrupt_stops_batch(monkeypatch, mock_config, mock_logging,
+                                        mock_ffmpeg, capsys):
+    """Ctrl-C is deliberate: stop the batch rather than plough on."""
+    urls = ["https://youtube.com/a", "https://youtube.com/b", "https://youtube.com/c"]
+
+    monkeypatch.setattr(main.downloadtool, "get_next_video_filename",
+                        lambda folder, ext="mp4": f"video_001.{ext}")
+    mock_dl = MagicMock(side_effect=KeyboardInterrupt())
+    monkeypatch.setattr(main.downloadtool, "download_video", mock_dl)
+    monkeypatch.setattr(sys, "argv", ["prog"] + [a for u in urls for a in ("--link", u)])
+
+    exit_code = main.main()
+
+    assert mock_dl.call_count == 1  # stopped, did not attempt b and c
+    assert exit_code == 1
+    assert "ABORTED" in capsys.readouterr().out
+
+
 def test_version_flag(monkeypatch):
     """Test that --version prints the version and exits."""
     from io import StringIO
