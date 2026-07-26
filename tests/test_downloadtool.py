@@ -267,6 +267,52 @@ def test_missing_output_without_skip_is_an_error(monkeypatch, tmp_path):
             segments=16, max_connections=16, segment_size=4, concurrent_segments=10,
         )
 
+# naming and metadata tests
+def test_default_template_includes_channel_title_and_id():
+    tmpl = downloadtool.DEFAULT_OUTPUT_TEMPLATE
+    assert "%(channel" in tmpl          # channel name
+    assert "%(title)" in tmpl           # title (length-capped)
+    assert "%(id)s" in tmpl             # stable unique suffix
+    assert tmpl.endswith(".%(ext)s")    # container decided by yt-dlp
+
+def test_default_template_falls_back_when_channel_missing():
+    """Must not yield names starting with 'NA - ' if channel is absent."""
+    tmpl = downloadtool.DEFAULT_OUTPUT_TEMPLATE
+    assert "channel,uploader" in tmpl
+    assert "|Unknown" in tmpl
+
+def test_output_template_used_when_given(monkeypatch, tmp_path):
+    tmpl = str(tmp_path / "%(title)s.%(ext)s")
+    command, _ = run_download(monkeypatch, tmp_path, output_template=tmpl)
+    assert command[command.index("-o") + 1] == tmpl
+
+def test_sequential_naming_when_no_template(monkeypatch, tmp_path):
+    command, _ = run_download(monkeypatch, tmp_path, output_template=None)
+    assert command[command.index("-o") + 1].endswith("video001.%(ext)s")
+
+def test_metadata_embedded_by_default(monkeypatch, tmp_path):
+    command, _ = run_download(monkeypatch, tmp_path)
+    assert "--embed-metadata" in command
+
+def test_metadata_can_be_disabled(monkeypatch, tmp_path):
+    command, _ = run_download(monkeypatch, tmp_path, embed_metadata=False)
+    assert "--embed-metadata" not in command
+
+def test_length_is_capped_per_field_not_per_path():
+    """
+    Regression: --trim-filenames truncates the whole output path, so a long
+    download folder had its trailing directories chopped off and the file was
+    written to the wrong folder. Length must be capped per template field.
+    """
+    tmpl = downloadtool.DEFAULT_OUTPUT_TEMPLATE
+    assert ".60s" in tmpl      # channel capped
+    assert ".120s" in tmpl     # title capped
+
+def test_trim_filenames_never_passed(monkeypatch, tmp_path):
+    for template in (str(tmp_path / "%(title)s.%(ext)s"), None):
+        command, _ = run_download(monkeypatch, tmp_path, output_template=template)
+        assert "--trim-filenames" not in command
+
 # convert audio to aac tests
 def test_ffprobe_failure(monkeypatch):
 
