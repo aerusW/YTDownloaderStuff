@@ -1,3 +1,4 @@
+import os
 import pytest
 import builtins
 from unittest.mock import MagicMock
@@ -254,6 +255,60 @@ def test_keyboard_interrupt_stops_batch(monkeypatch, mock_config, mock_logging,
     assert mock_dl.call_count == 1  # stopped, did not attempt b and c
     assert exit_code == 1
     assert "ABORTED" in capsys.readouterr().out
+
+
+# ---------------------------
+# Download archive
+# ---------------------------
+
+def test_archive_defaults_into_download_folder(monkeypatch, mock_config, mock_logging,
+                                               mock_download, mock_ffmpeg, tmp_path):
+    folder = str(tmp_path / "vids")
+    monkeypatch.setattr(sys, "argv",
+                        ["prog", "--link", "https://youtube.com/a", "--folder", folder])
+
+    main.main()
+
+    archive = mock_download.call_args.kwargs["download_archive"]
+    assert archive.endswith(".download-archive.txt")
+    assert os.path.dirname(archive) == os.path.abspath(folder)
+
+
+def test_no_archive_disables_dedup(monkeypatch, mock_config, mock_logging,
+                                   mock_download, mock_ffmpeg):
+    monkeypatch.setattr(sys, "argv",
+                        ["prog", "--link", "https://youtube.com/a", "--no-archive"])
+
+    main.main()
+
+    assert mock_download.call_args.kwargs["download_archive"] is None
+
+
+def test_explicit_archive_path_wins(monkeypatch, mock_config, mock_logging,
+                                    mock_download, mock_ffmpeg, tmp_path):
+    custom = str(tmp_path / "my-archive.txt")
+    monkeypatch.setattr(sys, "argv",
+                        ["prog", "--link", "https://youtube.com/a", "--archive", custom])
+
+    main.main()
+
+    assert mock_download.call_args.kwargs["download_archive"] == custom
+
+
+def test_skipped_downloads_counted_separately(monkeypatch, mock_config, mock_logging,
+                                              mock_ffmpeg, capsys):
+    """download_video returns None when the video was already archived."""
+    monkeypatch.setattr(main.downloadtool, "get_next_video_filename",
+                        lambda folder, ext="mp4": f"video_001.{ext}")
+    monkeypatch.setattr(main.downloadtool, "download_video",
+                        MagicMock(return_value=None))
+    monkeypatch.setattr(sys, "argv", ["prog", "--link", "https://youtube.com/a",
+                                      "--link", "https://youtube.com/b"])
+
+    exit_code = main.main()
+
+    assert exit_code == 0
+    assert "2 already in archive" in capsys.readouterr().out
 
 
 def test_version_flag(monkeypatch):
