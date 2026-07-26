@@ -2,6 +2,7 @@ import os
 import sys
 import re
 import glob
+import tempfile
 import subprocess
 from tqdm import tqdm
 from yt_dlp import YoutubeDL
@@ -139,6 +140,21 @@ def convert_audio_to_aac(filename: str, verbose: bool = False):
         # sys.exit(1)
         raise RuntimeError("Conversion aborted by user")
 
+def read_reported_path(report_file: str) -> str:
+    """
+    Read the path yt-dlp reported via --print-to-file after_move:%(filepath)s.
+
+    Returns the last non-empty line, or "" if yt-dlp wrote nothing — which
+    happens when no file was produced (e.g. the download was skipped).
+    """
+    try:
+        with open(report_file, "r", encoding="utf-8") as f:
+            lines = [line.strip() for line in f if line.strip()]
+    except OSError:
+        return ""
+    return lines[-1] if lines else ""
+
+
 def download_video(url: str, quality: str, output_filename: str, segments: int, max_connections: int, segment_size: int, concurrent_segments: int, skip_conversion: bool = False, verbose: bool = False, cookies_from_browser: str = None, cookies_file: str = None, js_runtime: str = "deno", remote_components: str = "ejs:github"):
     """
     Download a YouTube video with yt-dlp using aria2.
@@ -191,7 +207,17 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
     aria_progress_pattern = re.compile(
         r"\[(?:#\w+\s+)?(\d+\.?\d*\w*)\/(\d+\.?\d*\w*)\((\d+)%\)\s+CN:\d+\s+DL:(\d+\.?\d*\w*)\s+ETA:(\d+\w*)\]"
     )
-    
+
+    # Ask yt-dlp to report the path it actually wrote, rather than assuming it
+    # matches output_filename. The format strings end in "/b", and a single
+    # pre-muxed fallback stream skips the merger and keeps its own extension,
+    # so the guessed name can point at a file that was never created.
+    #
+    # --print-to-file rather than --print: --print implies --quiet, which would
+    # suppress the progress output this function parses. --print-to-file does not.
+    report_dir = tempfile.mkdtemp(prefix="ytdownload-")
+    report_file = os.path.join(report_dir, "filepath.txt")
+
     command = [ # Construct the yt-dlp command with aria2 and progress parsing
         "yt-dlp",
         "--js-runtimes", js_runtime,
@@ -200,6 +226,7 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
         "--newline",
         "--no-color",
         "--merge-output-format", container,
+        "--print-to-file", "after_move:%(filepath)s", report_file,
         "--external-downloader", "aria2c",
         "--external-downloader-args", f"aria2c:-x {max_connections} -s {segments} -k {segment_size}M --file-allocation=none --summary-interval=1 --console-log-level=warn --disable-ipv6=true", # --disable-ipv6: Google's CDN often resolves to IPv6; forcing IPv4 avoids "unreachable network" failures on IPv4-only connections
         "--concurrent-fragments", f"{concurrent_segments}",
@@ -286,18 +313,30 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
             raise RuntimeError("Download failed")
 
         print("[SUCCESS] Download finished.")
+
+        # Trust yt-dlp's own report over the predicted name; fall back to the
+        # prediction only if nothing was reported.
+        final_path = read_reported_path(report_file) or output_filename
+        if verbose:
+            print(f"[VERBOSE] yt-dlp wrote: {final_path}")
+        if not os.path.exists(final_path):
+            loggingtool.logging.error("Expected output missing after download: %s", final_path)
+            raise RuntimeError(f"Download reported success but {final_path} is missing")
+
         is_aac = "aac" in audio_codec.lower() or "mp4a" in audio_codec.lower()
 
         # MKV (Premium VP9/AV1 + Opus) is kept as-is — re-muxing to AAC/MP4 would
         # break the video stream and throw away the enhanced quality.
-        if container == "mkv":
+        if os.path.splitext(final_path)[1].lower() == ".mkv":
             if verbose:
                 print("[VERBOSE] MKV output — leaving video/Opus audio untouched.")
         elif not skip_conversion and not is_aac:
-            convert_audio_to_aac(output_filename, verbose=verbose)
+            convert_audio_to_aac(final_path, verbose=verbose)
         elif is_aac:
             if verbose:
                 print("[VERBOSE] Detected audio is already AAC. Skipping conversion.")
+
+        return final_path
 
     except KeyboardInterrupt:
         process.kill()
@@ -306,3 +345,5 @@ def download_video(url: str, quality: str, output_filename: str, segments: int, 
         print("\n[ABORTED]")
         # sys.exit(1)
         raise RuntimeError("Download aborted by user")
+    finally:
+        shutil.rmtree(report_dir, ignore_errors=True)
