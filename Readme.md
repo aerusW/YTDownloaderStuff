@@ -1,15 +1,41 @@
-# YTDownloadStuff
+# 🎬 YTDownloaderStuff
 
-A **Windows-friendly YouTube downloader** with:
+> A fast, **Windows-friendly YouTube downloader CLI** — multi-threaded aria2 downloads, clean progress bars, human-readable filenames, resumable batches, and browser-cookie auth that _actually works_ for Premium 1080p.
 
-* Descriptive filenames — `Channel - Title [videoID].ext` — with metadata embedded in the file
-* Skips videos already fetched, so re-running a batch never duplicates
-* Multi-threaded downloads via **aria2** with configurable segments and connections
-* Clean **tqdm** download progress bars
-* AAC audio conversion for Windows compatibility
-* Automatic merging to MP4
-* Optional quality selection (`720p`, `1080p`, `premium`, `4k`)
-* **Premium 1080p** support (YouTube's enhanced-bitrate VP9 stream, format `616`) saved losslessly as MKV — requires cookies from a logged-in YouTube Premium account
+![Python](https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white)
+![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)
+![Built with yt-dlp](https://img.shields.io/badge/built%20with-yt--dlp-red)
+![aria2](https://img.shields.io/badge/downloader-aria2-orange)
+![License: MIT](https://img.shields.io/badge/license-MIT-green)
+![Tests](https://img.shields.io/badge/tests-136%20passing-brightgreen)
+![Stars](https://img.shields.io/github/stars/aerusW/YTDownloaderStuff?style=social)
+
+```text
+── 2/6 ──────────────────────────────────────────────────────
+  https://youtu.be/KOpTWx1Eou4
+  Fireship - The most interesting ＂hack＂ in his…[KOpT].mp4
+   45% ━━━━━━━━━──────────  16MiB/s · ETA 8s
+  ▸ merging video and audio
+  ✓ saved · 15.9 MB
+──────────────────────────────────────────────────────────────
+✓ 5 downloaded · 1 skipped
+```
+
+## ✨ Highlights
+
+* ⚡ **Multi-threaded downloads** via **aria2** — configurable segments and connections for full-bandwidth speed
+* 📊 Clean, resizable **tqdm progress bars** for both download and audio conversion
+* 🏷️ **Human-readable filenames** — `Channel - Title [videoID].ext` — with title/channel/date embedded as metadata
+* 🔁 **Resumable batches** — already-fetched videos are skipped, so re-running never duplicates; one failure never aborts the rest
+* 🎚️ **Quality selection** — `720`, `1080`, `4k`, and **`premium`** (YouTube's enhanced-bitrate VP9 `616`, saved losslessly as MKV)
+* 🍪 **Browser-cookie auth that works** — auto-selects your signed-in profile and unlocks Premium 1080p ([details](COOKIES.md))
+* 🎵 Automatic **AAC audio conversion** and MP4 merging for maximum compatibility
+
+## 📑 Contents
+
+- [Requirements](#requirements) · [Installation](#installation) · [Configuration](#configuration)
+- [Usage](#usage) · [Cookies & Premium auth](#how-browser-cookies-are-read) · [Terminal output](#terminal-output)
+- [Testing](#testing) · [Contributing](#contributing) · [License](#license)
 
 ---
 
@@ -18,9 +44,12 @@ A **Windows-friendly YouTube downloader** with:
 You must have the following installed:
 
 * **Python 3.10+**
-* **ffmpeg** (added to PATH)
+* **ffmpeg** + **ffprobe** (on PATH)
 * **aria2** (for multi-threaded downloads)
-* Node.js (optional, for yt-dlp JS runtime, recommended)
+* **[Deno](https://deno.com)** — default JS runtime for YouTube's "n-challenge" (or Node.js via `--js-runtime node`)
+
+> All four external tools (`yt-dlp`, `ffmpeg`, `ffprobe`, `aria2c`) are checked at
+> startup and, if missing, reported up front with an install hint.
 
 ---
 
@@ -53,7 +82,7 @@ These are absolute locations, so the tool can be launched from any directory.
     "default_connections": 16,
     "default_segment_size": 4,
     "concurrent_segments": 10,
-    "default_cookies_browser": "chrome"
+    "default_cookies_browser": "firefox"
 }
 ```
 
@@ -134,10 +163,10 @@ still download and a summary lists what failed.
 python YTDownload.py --link https://youtu.be/VIDEOID --quality 4k --segments 12 --connections 12
 ```
 
-**Premium 1080p example** (enhanced VP9 bitrate → MKV, using Chrome cookies):
+**Premium 1080p example** (enhanced VP9 bitrate → MKV, using Firefox cookies):
 
 ```bash
-python YTDownload.py --link https://youtu.be/VIDEOID --quality premium --cookies-from-browser chrome
+python YTDownload.py --link https://youtu.be/VIDEOID --quality premium --cookies-from-browser firefox
 ```
 
 > Premium formats are only served to logged-in YouTube Premium accounts. Make sure
@@ -183,32 +212,11 @@ python -m pytest -v
 ```
 
 
-## Features
-
-* Fast **segmented downloads** using **aria2**
-* Real-time **tqdm** progress bars for both download and AAC conversion
-* Descriptive filenames with embedded metadata, or legacy sequential naming
-* Duplicate-safe re-runs via a download archive
-* Safe **AAC audio conversion** for Windows
-* Configurable **segments, connections, and segment size** for optimal download speed
-* Automatic MP4 merging
-
 ## Terminal output
 
-Output is grouped into one block per video and reflows to the terminal width,
-re-measured on every redraw so resizing mid-download does not smear the
-progress bar:
-
-```text
-── 2/6 ──────────────────────────────────────────────────────
-  https://youtu.be/KOpTWx1Eou4
-  Fireship - The most interesting ＂hack＂ in his…[KOpT].mp4
-   45% ━━━━━━━━━──────────  16MiB/s · ETA 8s
-  ▸ merging video and audio
-  ✓ saved · 15.9 MB
-──────────────────────────────────────────────────────────────
-✓ 5 downloaded · 1 skipped
-```
+Output is grouped into one block per video (see the sample at the top of this
+README) and reflows to the terminal width, re-measured on every redraw so
+resizing mid-download does not smear the progress bar.
 
 Two environment variables control appearance:
 
@@ -257,10 +265,12 @@ Contributions are welcome! Please follow these guidelines:
 * Provide clear descriptions and steps to reproduce
 * Include your Python version and OS
 
-### License
-
 ## License
 
-This project is licensed under the GPL V3 License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
 
-By contributing, you agree that your contributions will be licensed under the GPL V3 license.
+By contributing, you agree that your contributions will be licensed under the MIT license.
+
+---
+
+<sub>Built on <a href="https://github.com/yt-dlp/yt-dlp">yt-dlp</a>, <a href="https://aria2.github.io">aria2</a>, and <a href="https://ffmpeg.org">ffmpeg</a>. If this saved you time, a ⭐ helps others find it.</sub>
