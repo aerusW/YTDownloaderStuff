@@ -10,7 +10,7 @@ import src.console as console
 import src.browsercookies as browsercookies
 import subprocess
 
-version: str = "1.2.0 master"
+version: str = "1.2.1 master"
 def configure_console_encoding():
     """
     Make stdout/stderr tolerate characters outside the console's code page.

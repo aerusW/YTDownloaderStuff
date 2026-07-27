@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.2.1
+
+Repository, documentation and community polish — no functional code changes.
+
+### Documentation
+
+* Revamped the README with a badge/demo hero, a highlights list, and a contents
+  menu for a stronger first impression.
+* Corrected the license references to **MIT** (matching the `LICENSE` file).
+* Switched the cookie examples and the `config.json` default to **Firefox** (the
+  reliable path), and documented **Deno** as the default JS runtime.
+* Added **CONTRIBUTING.md** (dev-environment setup, test workflow, PR process)
+  and a Contributor Covenant **CODE_OF_CONDUCT.md**.
+
+### Project
+
+* Added GitHub **issue forms** (bug report / feature request) with a cookie-help
+  chooser link, and a **pull request template**.
+* Added a 1280×640 **social preview image** (`.github/social-preview.png`).
+* Set the repository description and discovery **topics** for GitHub search.
+
 ## 1.2.0
 
 ### Added
