@@ -144,6 +144,36 @@ python YTDownload.py --link https://youtu.be/VIDEOID --quality premium --cookies
 > you're signed in to YouTube in the chosen browser. Without valid cookies, yt-dlp
 > falls back to standard 1080p.
 
+### How browser cookies are read
+
+`--cookies-from-browser` is handled before yt-dlp sees it, so the *signed-in*
+profile is used rather than whichever profile happens to be marked default:
+
+* **Firefox** — every profile is scanned and the one actually holding YouTube
+  login cookies is selected automatically. Pin one with
+  `--cookies-from-browser firefox:C:\path\to\profile` to override.
+* **Chrome / Edge / Brave (Windows)** — **close the browser first** (it locks
+  its cookie database while running). The tool then obtains the master key
+  (v10/DPAPI, or v20 App-Bound via the browser's elevation service), decrypts the
+  cookies, and hands yt-dlp a temporary `cookies.txt`.
+
+> **Heads up:** current Chrome/Edge versions protect the App-Bound cookie key
+> with *caller validation* — the elevation service will only decrypt it for the
+> browser itself, so no external program (this tool, yt-dlp, or anything else in
+> your user session) can read those cookies. When that happens the tool tells you
+> and you should use **Firefox** (fully supported) or export a `cookies.txt` for
+> `--cookies-file`.
+
+**Export a reusable `cookies.txt`** (portable, no browser needed at download time):
+
+```bash
+python -m src.browsercookies firefox "C:\path\to\cookies.txt"
+python YTDownload.py --link https://youtu.be/VIDEOID --quality premium --cookies-file "C:\path\to\cookies.txt"
+```
+
+📖 **Cookie problems?** See **[COOKIES.md](COOKIES.md)** — a full troubleshooting
+guide (bot check, wrong profile, App-Bound Encryption, exporting from Chrome).
+
 ## Testing
 
 Run tests from the project root directory:

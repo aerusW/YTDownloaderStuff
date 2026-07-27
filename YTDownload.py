@@ -7,9 +7,10 @@ import src.loggingtool as loggingtool
 import src.downloadtool as downloadtool
 import src.configmanager as configmanager
 import src.console as console
+import src.browsercookies as browsercookies
 import subprocess
 
-version: str = "1.1.0 master"
+version: str = "1.2.0 master"
 def configure_console_encoding():
     """
     Make stdout/stderr tolerate characters outside the console's code page.
@@ -103,7 +104,7 @@ def main():
 
     parser.add_argument("--link", action="append", type=str, help="YouTube video URL (can be repeated)")
     parser.add_argument("--quality", choices=["720", "1080", "premium", "4k"], default="1080", help="Video quality. 'premium' targets YouTube's enhanced 1080p (format 616, VP9) saved as MKV — requires cookies from a logged-in Premium account")
-    parser.add_argument("--cookies-from-browser", type=str, help="Browser to pull cookies from, e.g. 'firefox' or 'firefox:C:\\path\\to\\profile'. Needed for 'premium' quality and to satisfy YouTube's bot check. Note: Chrome/Edge are blocked by App-Bound Encryption on Windows")
+    parser.add_argument("--cookies-from-browser", type=str, help="Browser to pull cookies from, e.g. 'firefox', 'chrome' or 'chrome:Profile 1'. Needed for 'premium' quality and to satisfy YouTube's bot check. The signed-in profile is auto-selected. Firefox is fully supported; for Chrome/Edge close the browser first, and note current versions block cookie reads via App-Bound Encryption — use Firefox or --cookies-file if so")
     parser.add_argument("--cookies-file", type=str, help="Path to a Netscape cookies.txt to authenticate with (alternative to --cookies-from-browser; survives uninstalling the browser)")
     parser.add_argument("--js-runtime", type=str, help="JavaScript runtime for YouTube's 'n challenge' (default: deno)")
     parser.add_argument("--folder", type=str, help="Output folder for downloaded videos (overrides config)")
@@ -137,6 +138,24 @@ def main():
     final_cookies_browser = args.cookies_from_browser if args.cookies_from_browser else config.get("default_cookies_browser")
     final_cookies_file = args.cookies_file if args.cookies_file else config.get("default_cookies_file")
     final_js_runtime = args.js_runtime if args.js_runtime else config.get("default_js_runtime", "deno")
+
+    # yt-dlp's own --cookies-from-browser silently authenticates nobody on a
+    # typical Windows setup: it picks whichever Firefox profile is marked default
+    # (often not the signed-in one) and cannot decrypt App-Bound (v20) Chrome/Edge
+    # cookies at all. Resolve the browser spec ourselves — selecting the logged-in
+    # profile and, for Chromium, decrypting to a cookies.txt — before handing it
+    # off. An explicit --cookies-file always wins and skips this entirely.
+    cookie_cleanup = None
+    if final_cookies_browser and not final_cookies_file:
+        resolution = browsercookies.resolve(final_cookies_browser)
+        for message in resolution.messages:
+            print(message)
+        if resolution.cookies_file:
+            final_cookies_file = resolution.cookies_file
+            final_cookies_browser = None
+        else:
+            final_cookies_browser = resolution.cookies_from_browser
+        cookie_cleanup = resolution.cleanup
     if args.quality == "premium" and not (final_cookies_browser or final_cookies_file):
         print("[WARNING] 'premium' quality needs cookies from a logged-in YouTube Premium account.")
         print("          Pass --cookies-from-browser firefox (or --cookies-file cookies.txt).")
@@ -187,49 +206,54 @@ def main():
                                                downloadtool.DEFAULT_OUTPUT_TEMPLATE)
         )
 
-    for index, url in enumerate(urls, start=1):
-        # Sequential naming needs the next free slot; template naming is resolved
-        # by yt-dlp itself, so skip the directory scan entirely in that case.
-        output_filename = (
-            downloadtool.get_next_video_filename(final_folder, ext=container)
-            if final_template is None
-            else os.path.join(final_folder, f"video.{container}")
-        )
-        console.write(console.block_header(index, len(urls), url))
-        try:
-            written = downloadtool.download_video(
-                url,
-                args.quality,
-                output_filename,
-                final_segments,
-                final_connections,
-                final_segment_size,
-                final_concurrent_segments,
-                skip_conversion=args.do_not_convert,
-                verbose=args.verbose,
-                cookies_from_browser=final_cookies_browser,
-                cookies_file=final_cookies_file,
-                js_runtime=final_js_runtime,
-                download_archive=final_archive,
-                output_template=final_template,
-                embed_metadata=not args.no_metadata
+    try:
+        for index, url in enumerate(urls, start=1):
+            # Sequential naming needs the next free slot; template naming is
+            # resolved by yt-dlp itself, so skip the directory scan in that case.
+            output_filename = (
+                downloadtool.get_next_video_filename(final_folder, ext=container)
+                if final_template is None
+                else os.path.join(final_folder, f"video.{container}")
             )
-            if written is None:
-                skipped.append(url)
-            else:
-                size = console.human_size(os.path.getsize(written)) \
-                    if os.path.exists(written) else "unknown size"
-                console.write(console.status(
-                    "ok", f"saved{console.separator()}{size}", "green"))
-        except KeyboardInterrupt:
-            # Ctrl-C is a deliberate stop: abandon the whole batch.
-            console.write(console.status("fail", "interrupted — stopping batch", "yellow"))
-            failures.append((url, "aborted by user"))
-            break
-        except Exception as exc:
-            loggingtool.logging.error("Failed to download %s: %s", url, exc)
-            console.write(console.status("fail", str(exc), "red"))
-            failures.append((url, str(exc)))
+            console.write(console.block_header(index, len(urls), url))
+            try:
+                written = downloadtool.download_video(
+                    url,
+                    args.quality,
+                    output_filename,
+                    final_segments,
+                    final_connections,
+                    final_segment_size,
+                    final_concurrent_segments,
+                    skip_conversion=args.do_not_convert,
+                    verbose=args.verbose,
+                    cookies_from_browser=final_cookies_browser,
+                    cookies_file=final_cookies_file,
+                    js_runtime=final_js_runtime,
+                    download_archive=final_archive,
+                    output_template=final_template,
+                    embed_metadata=not args.no_metadata
+                )
+                if written is None:
+                    skipped.append(url)
+                else:
+                    size = console.human_size(os.path.getsize(written)) \
+                        if os.path.exists(written) else "unknown size"
+                    console.write(console.status(
+                        "ok", f"saved{console.separator()}{size}", "green"))
+            except KeyboardInterrupt:
+                # Ctrl-C is a deliberate stop: abandon the whole batch.
+                console.write(console.status("fail", "interrupted — stopping batch", "yellow"))
+                failures.append((url, "aborted by user"))
+                break
+            except Exception as exc:
+                loggingtool.logging.error("Failed to download %s: %s", url, exc)
+                console.write(console.status("fail", str(exc), "red"))
+                failures.append((url, str(exc)))
+    finally:
+        # Remove any temporary cookies.txt extracted from the browser.
+        if cookie_cleanup:
+            cookie_cleanup()
 
     return report_results(len(urls), failures, log_file, skipped)
 

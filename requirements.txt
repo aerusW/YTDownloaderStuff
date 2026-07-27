@@ -2,5 +2,8 @@
 # simplest way to get it onto PATH; a standalone binary works equally well.
 yt-dlp>=2024.0.0
 tqdm>=4.66.0
+# AES-GCM for decrypting Chrome/Edge/Brave cookies (--cookies-from-browser).
+# Only used on the Windows Chromium path; Firefox needs nothing extra.
+cryptography>=42.0.0
 pytest>=7.4.0
 pytest-cov>=3.0.0

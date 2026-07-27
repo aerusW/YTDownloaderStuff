@@ -1,5 +1,49 @@
 # Changelog
 
+## 1.2.0
+
+### Added
+
+* **`--cookies-from-browser` now selects the signed-in profile automatically.**
+  Every Firefox profile is scanned and the one actually holding YouTube login
+  cookies is chosen, instead of whichever profile is marked default — so
+  extraction authenticates the account you are logged in as. Pin a specific
+  profile with `firefox:PATH` to override.
+* **Chromium cookie decryption (Windows).** For Chrome / Edge / Brave the tool
+  copies the cookie database, obtains the master key (v10/DPAPI, or v20 App-Bound
+  via the browser's elevation service) and decrypts the cookies itself into a
+  temporary `cookies.txt`. This unlocks older DPAPI stores and any App-Bound
+  store whose build does not enforce caller validation.
+* Cookie extraction degrades gracefully: if the store cannot be read (browser
+  open, or an App-Bound key the browser only lets itself decrypt) the tool says
+  exactly why and points you at Firefox or `--cookies-file`, then lets yt-dlp
+  try, so a download never simply fails without cause.
+* **Export a reusable `cookies.txt`** with
+  `python -m src.browsercookies <browser> <output>` — portable and usable with
+  `--cookies-file` without the browser open. Firefox is supported directly;
+  Chrome/Edge report the App-Bound limitation.
+* **[COOKIES.md](COOKIES.md)** troubleshooting guide covering the bot check,
+  profile selection, App-Bound Encryption, and exporting cookies from Chrome.
+
+### Fixed
+
+* **Firefox cookies silently authenticated nobody.** `--cookies-from-browser
+  firefox` could extract from a logged-out profile, so `premium` quality and
+  YouTube's bot check quietly fell back as if no cookies had been supplied. The
+  signed-in profile is now chosen automatically.
+* **Chrome/Edge failures are no longer opaque.** Instead of yt-dlp's "Could not
+  copy Chrome cookie database", the tool explains the actual cause (browser open,
+  or App-Bound Encryption) and the working alternatives.
+
+### Known issues
+
+* Chrome/Edge/Brave keep their cookie database locked while running — close the
+  browser before extracting. Firefox can stay open.
+* **Current Chrome/Edge cookies cannot be read by this (or any) ordinary
+  program.** Their App-Bound key is protected with caller validation, so the
+  browser's elevation service only decrypts for the browser itself. Use Firefox
+  (fully supported) or export a Netscape `cookies.txt` and pass `--cookies-file`.
+
 ## 1.1.0
 
 ### Added
@@ -66,6 +110,7 @@
 * `--cookies-from-browser` cannot read Chrome or Edge cookies on Windows due to
   App-Bound Encryption. Use Firefox, or `--cookies-file` with a Netscape
   `cookies.txt`. Without cookies, `premium` falls back to standard 1080p VP9.
+  *(Addressed in 1.2.0.)*
 * `--quality 4k` requires an AVC stream (`vcodec^=avc1`). YouTube serves 2160p
   as VP9/AV1 only, so on a genuinely 4K video this caps at 1080p.
 
