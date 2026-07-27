@@ -1,0 +1,89 @@
+name: 🐛 Bug report
+description: Something isn't working as expected
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please fill in the sections below so we can
+        reproduce it quickly. **For cookie / "Sign in to confirm you're not a bot"
+        problems, please read [COOKIES.md](../blob/master/COOKIES.md) first** —
+        most are answered there.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, and what you expected instead.
+      placeholder: The download failed with... but I expected...
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command you ran
+      description: The exact `python YTDownload.py ...` command (redact private URLs if needed).
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Output / logs
+      description: |
+        Re-run with `--verbose` and paste the relevant output. This is
+        automatically formatted, so no backticks are needed.
+      render: shell
+    validations:
+      required: false
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Windows 11 23H2 / Ubuntu 24.04 / macOS 14
+    validations:
+      required: true
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: Output of `python --version`
+      placeholder: Python 3.12.3
+    validations:
+      required: true
+
+  - type: input
+    id: tool-versions
+    attributes:
+      label: Tool versions
+      description: Output of `yt-dlp --version`, `ffmpeg -version` (first line), `aria2c --version` (first line)
+      placeholder: "yt-dlp 2025.x.x, ffmpeg 7.x, aria2 1.37"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: cookies
+    attributes:
+      label: Is this related to cookies / authentication?
+      options:
+        - "No"
+        - "Yes — Firefox"
+        - "Yes — Chrome/Edge/Brave"
+        - "Yes — cookies.txt file"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and didn't find a duplicate.
+          required: true
+        - label: I'm using the latest version of `master`.
+          required: false

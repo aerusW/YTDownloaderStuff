@@ -243,27 +243,13 @@ reported up front with an install hint rather than failing mid-download.
 
 ## Contributing
 
-Contributions are welcome! Please follow these guidelines:
+Contributions are very welcome! See **[CONTRIBUTING.md](CONTRIBUTING.md)** for
+dev-environment setup, the test workflow, and how to open a pull request. Please
+also read our **[Code of Conduct](CODE_OF_CONDUCT.md)**.
 
-### Getting Started
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/your-feature`)
-3. Make your changes and commit them (`git commit -m 'Add your feature'`)
-4. Push to the branch (`git push origin feature/your-feature`)
-5. Open a Pull Request
-
-### Code Standards
-
-* Add tests for new functionality
-* Ensure all tests pass before submitting a PR
-* Include docstrings for functions and classes
-
-### Reporting Issues
-
-* Check existing issues before opening a new one
-* Provide clear descriptions and steps to reproduce
-* Include your Python version and OS
+- 🐛 [Report a bug](../../issues/new?template=bug_report.yml)
+- 💡 [Request a feature](../../issues/new?template=feature_request.yml)
+- 🍪 Cookie/auth trouble? Start with [COOKIES.md](COOKIES.md).
 
 ## License
 
